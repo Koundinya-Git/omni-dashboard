@@ -462,13 +462,14 @@ npm run tauri build
 
 ## ⚖️ License & Terms of Use
 
-This project is open-source software licensed under the **GNU General Public License v3 (GPLv3)** with explicit additional terms as permitted under **GPLv3 Section 7**.
+This project is open-source software licensed under the **GNU General Public License v3 (GPLv3)** with explicit additional terms as permitted under **GPLv3 Section 7**. Please refer to "Terms_and_Conditions.md" for further details. By using this application, you agree to the said Terms and Conditions in the said "Terms_and_Conditions.md" file.
+
 
 ```markdown
 GNU GENERAL PUBLIC LICENSE
 Version 3, 29 June 2007
 
-Copyright (C) 2026 Koundinya
+Copyright (C) 2026 Koundinya Gajulapalli
 
 ===============================================================================
 ADDITIONAL TERMS UNDER GPLv3 SECTION 7
@@ -481,7 +482,7 @@ ADDITIONAL TERMS UNDER GPLv3 SECTION 7
 
 2. Visible User-Facing Attribution (§7b):
    Distributors and developers of modified versions must preserve and display 
-   clear, noticeable attribution to the original creator (Koundinya) and provide 
+   clear, noticeable attribution to the original creator (Koundinya Gajulapalli) and provide 
    a direct link to the original repository within the user-facing interface 
    of the application (e.g., in the "About", "Settings", or "Dashboard" sections).
 ```
