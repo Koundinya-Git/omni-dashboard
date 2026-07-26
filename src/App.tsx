@@ -1282,6 +1282,23 @@ export default function App() {
 
                     <div className="p-4 bg-[#212121] max-w-4xl mx-auto w-full flex flex-col gap-2">
                       
+                      {/* LIVE MEMORY CHIP (PiecesOS Style) */}
+                      <div className="flex items-center gap-3 bg-[#171717]/90 backdrop-blur-md border border-emerald-500/20 rounded-xl px-4 py-2 w-full mb-1 shadow-lg shadow-black/50">
+                         <div className="relative flex items-center justify-center">
+                            <Activity className="w-4 h-4 text-emerald-500" />
+                            <div className="absolute inset-0 bg-emerald-500 rounded-full blur animate-pulse opacity-50"></div>
+                         </div>
+                         <div className="flex-1 flex flex-col">
+                            <div className="flex items-center justify-between">
+                               <span className="text-[11px] font-bold text-emerald-500 uppercase tracking-widest">Live Context Stream Active</span>
+                               <span className="text-[10px] text-gray-500 font-mono">Observer Effect Engaged</span>
+                            </div>
+                            <p className="text-xs text-gray-400 mt-0.5 truncate">
+                               System is monitoring background process activity live.
+                            </p>
+                         </div>
+                      </div>
+
                       {/* RAG ATTACHMENT CHIP */}
                       {attachedTextbookContext && (
                         <div className="flex items-center gap-2 bg-[#2f2f2f] border border-gray-600 rounded-xl px-3 py-2 w-fit shadow-md">
