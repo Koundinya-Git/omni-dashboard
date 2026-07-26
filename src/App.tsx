@@ -81,6 +81,11 @@ export default function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(true);
   const [time, setTime] = useState<Date>(new Date());
   const [quoteIndex, setQuoteIndex] = useState(0);
+  const [telemetryData, setTelemetryData] = useState<SystemStats>({
+    ram_total: '0.00 GB',
+    ram_used: '0.00 GB',
+    ram_percent: 0,
+  });
   
   // --- AI CONFIG STATE ---
   const [selectedTier, setSelectedTier] = useState<string>('General');
@@ -189,6 +194,25 @@ export default function App() {
 
   // When Selected Date changes, reload events for that month/week scope
   useEffect(() => { loadCalendarEvents(); }, [selectedDate]);
+
+  // --- TELEMETRY POLLING EFFECT ---
+  useEffect(() => {
+    let intervalId: number;
+    if (activeTab === 'telemetry') {
+      const fetchTelemetry = async () => {
+        try {
+          const data = await invoke<SystemStats>('get_telemetry');
+          setTelemetryData(data);
+        } catch (e) {
+          console.error("Telemetry error:", e);
+        }
+      };
+      
+      fetchTelemetry(); // Fetch immediately on tab open
+      intervalId = window.setInterval(fetchTelemetry, 2000); // Ping every 2 seconds
+    }
+    return () => clearInterval(intervalId);
+  }, [activeTab]);
 
   // --- FOCUS TIMER & SYNC EFFECT ---
   useEffect(() => {
@@ -2128,8 +2152,85 @@ export default function App() {
             </div>
           )}
 
-          {/* RESTORED WIP TABS (Goals, Stats, Timetable, Flashcards, Summaries, Telemetry) */}
-          {['goals', 'stats', 'timetable', 'flashcards', 'summaries', 'telemetry'].includes(activeTab) && (
+          {/* SYSTEM TELEMETRY MODULE */}
+          {activeTab === 'telemetry' && (
+            <div className="flex-1 overflow-y-auto custom-scrollbar">
+              <div className="max-w-4xl w-full mx-auto px-8 py-12 flex flex-col h-full animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <div className="flex items-center gap-4 mb-8 border-b border-gray-800 pb-4">
+                  <div className="p-3 bg-emerald-500/10 rounded-xl border border-emerald-500/20">
+                    <Activity className="w-8 h-8 text-emerald-500" />
+                  </div>
+                  <div>
+                    <h1 className="text-2xl font-bold text-gray-100">System Telemetry</h1>
+                    <p className="text-sm text-gray-500 font-mono tracking-wide">OC-DAEMON-SYSINFO-BRIDGE</p>
+                  </div>
+                </div>
+                
+                {/* Physical Memory Widget */}
+                <div className="bg-[#171717] border border-gray-800 rounded-3xl p-8 flex flex-col gap-6 shadow-2xl relative overflow-hidden group">
+                   {/* Background glowing pulse effect */}
+                   <div className="absolute -top-32 -right-32 w-64 h-64 bg-emerald-500/5 rounded-full blur-3xl animate-pulse pointer-events-none group-hover:bg-emerald-500/10 transition-colors duration-700"></div>
+
+                   <div className="flex justify-between items-start z-10">
+                      <div className="flex flex-col gap-1">
+                         <h3 className="text-xl font-bold text-gray-200 flex items-center gap-2">
+                           <HardDrive className="w-5 h-5 text-emerald-500" /> Physical Memory (RAM)
+                         </h3>
+                         <p className="text-sm text-gray-500">Real-time hardware allocation tracking.</p>
+                      </div>
+                      <div className="text-right flex flex-col items-end">
+                         <p className="text-4xl font-mono font-bold text-emerald-400 drop-shadow-[0_0_12px_rgba(16,185,129,0.3)]">
+                           {telemetryData.ram_used}
+                         </p>
+                         <p className="text-xs text-gray-500 font-mono tracking-wider">
+                           / {telemetryData.ram_total} CAPACITY
+                         </p>
+                      </div>
+                   </div>
+
+                   <div className="mt-4 z-10 relative">
+                     <div className="w-full bg-[#212121] rounded-full h-6 overflow-hidden border border-gray-700 shadow-inner relative">
+                        {/* Tick marks overlay for aesthetics */}
+                        <div className="absolute inset-0 w-full h-full flex justify-between px-1 opacity-20 pointer-events-none">
+                           {Array.from({length: 20}).map((_, i) => <div key={i} className="h-full w-px bg-white"></div>)}
+                        </div>
+                        
+                        <div 
+                           className={`h-full rounded-full transition-all duration-1000 ease-out shadow-[inset_0_2px_4px_rgba(255,255,255,0.3)] 
+                            ${telemetryData.ram_percent > 85 ? 'bg-red-500' : 
+                              telemetryData.ram_percent > 65 ? 'bg-yellow-500' : 
+                              'bg-emerald-500'}`}
+                           style={{ width: `${telemetryData.ram_percent}%` }}
+                        />
+                     </div>
+                     <div className="flex justify-between items-center mt-3 px-1">
+                        <span className="text-xs font-mono text-gray-600 font-bold">0%</span>
+                        <span className="text-sm font-mono font-bold text-gray-300 bg-[#2f2f2f] px-4 py-1 rounded-full border border-gray-700 shadow-sm">
+                           {telemetryData.ram_percent.toFixed(2)}% ALLOCATED
+                        </span>
+                        <span className="text-xs font-mono text-gray-600 font-bold">100%</span>
+                     </div>
+                   </div>
+                </div>
+
+                {/* Placeholder for future widgets (GPU VRAM, CPU) */}
+                <div className="grid grid-cols-2 gap-4 mt-6">
+                   <div className="bg-[#171717]/50 border border-gray-800/50 rounded-2xl p-6 flex flex-col items-center justify-center text-gray-600 border-dashed">
+                      <BrainCircuit className="w-8 h-8 mb-2 opacity-50" />
+                      <span className="text-xs font-mono uppercase tracking-widest">GPU VRAM Monitor (Pending)</span>
+                   </div>
+                   <div className="bg-[#171717]/50 border border-gray-800/50 rounded-2xl p-6 flex flex-col items-center justify-center text-gray-600 border-dashed">
+                      <Activity className="w-8 h-8 mb-2 opacity-50" />
+                      <span className="text-xs font-mono uppercase tracking-widest">CPU Threads (Pending)</span>
+                   </div>
+                </div>
+
+              </div>
+            </div>
+          )}
+
+          {/* RESTORED WIP TABS (Goals, Stats, Timetable, Flashcards, Summaries) */}
+          {['goals', 'stats', 'timetable', 'flashcards', 'summaries'].includes(activeTab) && (
             <div className="flex-1 flex flex-col items-center justify-center text-gray-500 p-8 text-center">
               <Activity className="w-12 h-12 mb-4 opacity-50" />
               <h2 className="text-2xl font-mono mb-2 uppercase tracking-widest text-gray-400">{activeTab} Module</h2>

@@ -2301,7 +2301,7 @@ fn main() {
                 }
             }
             _ => {}
-        })
+        }) 
         .invoke_handler(tauri::generate_handler![
             get_telemetry,
             ask_ollama,
