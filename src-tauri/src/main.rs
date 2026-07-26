@@ -7,7 +7,7 @@ use std::io::Write;
 use std::os::windows::process::CommandExt;
 use std::process::{Command, Stdio};
 use std::sync::mpsc::{self, Sender};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::thread;
 use sysinfo::System;
 use tauri::{
@@ -16,6 +16,9 @@ use tauri::{
     Manager, State,
 };
 use lopdf::Document;
+use active_win_pos_rs::get_active_window;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use serde_json::json;
 
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 
@@ -190,6 +193,27 @@ fn init_db() -> SqlResult<Connection> {
             tags TEXT NOT NULL DEFAULT '[]',
             color TEXT NOT NULL DEFAULT '#3b82f6',
             is_all_day INTEGER NOT NULL DEFAULT 0
+        )",
+        [],
+    )?;
+
+    // --- NEW: IMMUTABLE TELEMETRY TRACKING TABLES ---
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS immutable_telemetry (
+            id TEXT PRIMARY KEY,
+            timestamp INTEGER NOT NULL,
+            app_name TEXT NOT NULL,
+            window_title TEXT NOT NULL,
+            category TEXT NOT NULL
+        )",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS live_memory_summaries (
+            id TEXT PRIMARY KEY,
+            timestamp INTEGER NOT NULL,
+            summary_text TEXT NOT NULL
         )",
         [],
     )?;
@@ -438,6 +462,31 @@ fn build_db_context(conn: &Connection) -> String {
     let current_time = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as i64;
     let one_day_ms = 86_400_000;
     
+    // LIVE MEMORY INJECTION (The Observer Effect)
+    context.push_str("\n--- LIVE MEMORY CONTEXT (OBSERVER EFFECT) ---\n");
+    let one_hour_ago = current_time - 3_600_000;
+    if let Ok(mut stmt) = conn.prepare("SELECT app_name, window_title, category, COUNT(*) as time_spent FROM immutable_telemetry WHERE timestamp > ?1 GROUP BY window_title ORDER BY time_spent DESC LIMIT 5") {
+        if let Ok(telemetry_iter) = stmt.query_map(params![one_hour_ago], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, i32>(3)? * 10, // 10 seconds per heartbeat
+            ))
+        }) {
+            let mut found = false;
+            for t in telemetry_iter.flatten() {
+                found = true;
+                context.push_str(&format!("- [CATEGORY: {}] App: '{}', Title: '{}' (~{} seconds)\n", t.2, t.0, t.1, t.3));
+            }
+            if !found {
+                context.push_str("- No system activity logged in the last hour.\n");
+            } else {
+                context.push_str("\nAI DIRECTIVE: Use this context to gently hold the user accountable. If they are distracted (e.g. YouTube, Social Media), push them to focus. If they have been in 'Deep Work' for a long time, suggest a break.\n");
+            }
+        }
+    }
+
     context.push_str("\n--- TODAY's TIME-BLOCKING SCHEDULE & EVENTS ---\n");
     if let Ok(mut stmt) = conn.prepare("SELECT id, title, start_time, end_time, event_type FROM calendar_events WHERE start_time >= ?1 AND start_time < ?2 ORDER BY start_time ASC") {
         let mut found_events = false;
@@ -1712,18 +1761,33 @@ fn get_calendar_events_in_range(db: State<'_, DbState>, start: i64, end: i64) ->
     Ok(list)
 }
 
-
 // ==========================================
-// 4. UI AUTOMATION / TELEMETRY LOGIC
+// 4. TELEMETRY & ACTIVE WINDOW LOGIC
 // ==========================================
-fn run_telemetry_loop() {
-    /*
-    loop {
-        let active_window = get_active_window();
-        println!("--- 🟢 ACTIVE APP: {} ---", active_window);
-        // ... OCR and SQLite saving logic ...
+#[tauri::command]
+fn get_active_app_telemetry() -> Result<serde_json::Value, String> {
+    match get_active_window() {
+        Ok(window) => Ok(json!({
+            "status": "online",
+            "app_name": window.app_name,
+            "title": window.title,
+            "process_id": window.process_id,
+            "x": window.position.x,
+            "y": window.position.y,
+            "width": window.position.width,
+            "height": window.position.height,
+        })),
+        Err(_) => Ok(json!({
+            "status": "idle",
+            "app_name": "Unknown / Desktop",
+            "title": "System Idle",
+            "process_id": 0,
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0,
+        })),
     }
-    */
 }
 
 // ==========================================
@@ -1875,7 +1939,6 @@ async fn flush_vram(model_tier: String) -> Result<(), String> {
 #[tauri::command]
 fn get_telemetry() -> Result<serde_json::Value, String> {
     let mut sys = System::new_all();
-    // Refresh only memory information to avoid unnecessary overhead
     sys.refresh_memory();
     
     let total_ram = sys.total_memory();
@@ -1887,7 +1950,6 @@ fn get_telemetry() -> Result<serde_json::Value, String> {
         0.0
     };
     
-    // Convert the data from bytes to gigabytes for better readability
     let total_gb = total_ram as f64 / 1_073_741_824.0;
     let used_gb = used_ram as f64 / 1_073_741_824.0;
     
@@ -2279,8 +2341,43 @@ fn main() {
                 })
                 .build(app)?;
 
-            std::thread::spawn(move || {
-                run_telemetry_loop();
+            // --- THE SILENT WATCHER BACKGROUND LOOP ---
+            tauri::async_runtime::spawn(async move {
+                // We create a completely separate DB connection inside the thread so it doesn't lock the main app
+                if let Ok(conn) = Connection::open("omni_core.db") {
+                    loop {
+                        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as i64;
+                        
+                        if let Ok(window) = get_active_window() {
+                            let app_name = window.app_name.to_lowercase();
+                            let title = window.title.to_lowercase();
+                            
+                            // Basic categorization logic (can be expanded later)
+                            let category = if app_name.contains("code") || app_name.contains("cursor") || title.contains("omni-core") || app_name.contains("terminal") {
+                                "Deep Work"
+                            } else if app_name.contains("chrome") || app_name.contains("edge") || app_name.contains("brave") {
+                                if title.contains("youtube") || title.contains("twitter") || title.contains("reddit") {
+                                    "Distraction"
+                                } else {
+                                    "Research"
+                                }
+                            } else if app_name.contains("discord") || app_name.contains("spotify") {
+                                "Leisure"
+                            } else {
+                                "Neutral"
+                            };
+
+                            let id = format!("log_{}", now);
+                            let _ = conn.execute(
+                                "INSERT INTO immutable_telemetry (id, timestamp, app_name, window_title, category) VALUES (?1, ?2, ?3, ?4, ?5)",
+                                params![id, now, window.app_name, window.title, category],
+                            );
+                        }
+                        
+                        // Polling rate for telemetry (every 10 seconds)
+                        tokio::time::sleep(Duration::from_secs(10)).await;
+                    }
+                }
             });
 
             Ok(())
@@ -2304,6 +2401,7 @@ fn main() {
         }) 
         .invoke_handler(tauri::generate_handler![
             get_telemetry,
+            get_active_app_telemetry, // <--- REGISTERED ACTIVE WIN COMMAND
             ask_ollama,
             flush_vram,
             get_tasks,
