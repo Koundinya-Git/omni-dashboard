@@ -16,7 +16,6 @@ use tauri::{
     Manager, State,
 };
 use lopdf::Document;
-use sysinfo::System;
 
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 
@@ -1852,21 +1851,6 @@ fn get_system_prompt(persona: &str) -> &'static str {
 // ==========================================
 // 7. TAURI COMMANDS (OLLAMA & STATS)
 // ==========================================
-#[tauri::command]
-fn get_telemetry() -> Result<serde_json::Value, String> {
-    let mut sys = System::new();
-    sys.refresh_memory();
-
-    let total = sys.total_memory() as f64 / 1_073_741_824.0;
-    let used = sys.used_memory() as f64 / 1_073_741_824.0;
-
-    Ok(serde_json::json!({
-        "ram_total": format!("{:.1}", total),
-        "ram_used": format!("{:.1}", used),
-        "ram_percent": if total > 0.0 { (used / total) * 100.0 } else { 0.0 }
-    }))
-}
-
 #[tauri::command]
 async fn flush_vram(model_tier: String) -> Result<(), String> {
     let (actual_model, _) = get_model_config(&model_tier);
