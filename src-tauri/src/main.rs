@@ -16,6 +16,7 @@ use tauri::{
     Manager, State,
 };
 use lopdf::Document;
+use sysinfo::System;
 
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 
@@ -1885,6 +1886,32 @@ async fn flush_vram(model_tier: String) -> Result<(), String> {
     .await;
 
     Ok(())
+}
+
+#[tauri::command]
+fn get_telemetry() -> Result<serde_json::Value, String> {
+    let mut sys = System::new_all();
+    // Refresh only memory information to avoid unnecessary overhead
+    sys.refresh_memory();
+    
+    let total_ram = sys.total_memory();
+    let used_ram = sys.used_memory();
+    
+    let percent = if total_ram > 0 {
+        (used_ram as f64 / total_ram as f64) * 100.0
+    } else {
+        0.0
+    };
+    
+    // Convert the data from bytes to gigabytes for better readability
+    let total_gb = total_ram as f64 / 1_073_741_824.0;
+    let used_gb = used_ram as f64 / 1_073_741_824.0;
+    
+    Ok(serde_json::json!({
+        "ram_total": format!("{:.2} GB", total_gb),
+        "ram_used": format!("{:.2} GB", used_gb),
+        "ram_percent": percent
+    }))
 }
 
 fn fetch_web_snippets(query: &str) -> String {
