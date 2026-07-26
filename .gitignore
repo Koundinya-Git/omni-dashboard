@@ -1,0 +1,11 @@
+# Node & Build folders
+node_modules/
+dist/
+src-tauri/target/
+
+# Omni-Core Personal Database
+omni_core.db
+omni_core.db-journal
+
+# Audio Cache (so you don't upload MBs of downloaded songs)
+src-tauri/music_cache/

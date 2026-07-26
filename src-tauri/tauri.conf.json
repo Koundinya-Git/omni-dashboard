@@ -1,0 +1,28 @@
+{
+  "productName": "omni-dashboard",
+  "version": "0.1.0",
+  "identifier": "com.omni.dashboard",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:1420"
+  },
+  "app": {
+    "security": {
+      "assetProtocol": {
+        "enable": true,
+        "scope": ["**/*"]
+      },
+      "csp": null
+    },
+    "windows": [
+      {
+        "title": "OmniDashboard",
+        "width": 1200,
+        "height": 800,
+        "visible": true
+      }
+    ]
+  }
+}

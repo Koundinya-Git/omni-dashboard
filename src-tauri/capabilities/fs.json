@@ -1,0 +1,9 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "fs",
+  "description": "Allows background database storage",
+  "windows": [
+    "main"
+  ],
+  "permissions": []
+}
