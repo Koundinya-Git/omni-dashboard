@@ -5,16 +5,20 @@ import { open } from '@tauri-apps/plugin-dialog';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { 
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell 
+} from 'recharts';
+import { 
   Search, PanelLeft, Edit, Book, Calendar, Layers, 
   BrainCircuit, FileText, Activity, ChevronDown, 
   Maximize, Plus, Mic, CheckCircle2, 
-  PlayCircle, Timer, CheckSquare, PieChart, 
+  PlayCircle, Timer, CheckSquare, PieChart as PieChartIcon, 
   MessageSquare, Globe, BookOpen, Quote,
   Trash2, Tag, GraduationCap, Folder, FolderPlus, 
   MessageSquarePlus, Home, Target, X, Settings, User,
   Volume2, VolumeX, Send, Music, Play, Pause, Square, ChevronRight, Repeat,
   Shuffle, SkipForward, SkipBack, ListMusic, HardDrive, FileAudio, CloudOff, Download,
-  AlertTriangle, Library, FileUp, Clock, Users, Palmtree, AlertCircle, ChevronLeft, MapPin, AlignLeft
+  AlertTriangle, Library, FileUp, Clock, Users, Palmtree, AlertCircle, ChevronLeft, MapPin, AlignLeft,
+  BarChart3, Brain, Info
 } from 'lucide-react';
 
 // --- TYPESCRIPT INTERFACES ---
@@ -34,22 +38,24 @@ interface FocusSession { id: string; task_id: string; title?: string; duration_m
 interface YTMusicSong { videoId: string; title: string; artists: {name: string}[]; thumbnails: {url: string}[]; duration: string; }
 interface Playlist { id: string; name: string; tags: string[]; songs: YTMusicSong[]; created_at: number; }
 interface OfflineSongItem { id: string; title: string; artist: string; duration: string; local_path: string; thumbnail_url: string; source: string; }
-
-// Textbook Interfaces
 interface TextbookItem { id: string; title: string; author: string; course_id: string; file_path: string; total_pages: number; created_at: number; }
 interface TextbookAttachment { textbook_id: string; page_start: number | null; page_end: number | null; exact_snippet: string | null; }
 interface BookSetItem { id: string; name: string; created_at: number; textbook_ids: string[]; }
-
-// Calendar Interface
 interface CalendarEventItem {
   id: string; title: string; description: string; start_time: number; end_time: number;
   event_type: string; tags: string[]; color: string; is_all_day: boolean;
 }
-
-// Dialog Interface
 interface CustomDialogState {
   isOpen: boolean; type: 'prompt' | 'confirm'; title: string; message?: string; value: string; placeholder?: string;
   resolvePrompt?: (value: string | null) => void; resolveConfirm?: (value: boolean) => void;
+}
+
+// --- NEW TELEMETRY INTERFACES ---
+interface TopApp { app_name: string; category: string; time_spent: number; }
+interface TelemetryStats {
+  today: Record<string, number>;
+  historical: any[];
+  top_apps: TopApp[];
 }
 
 // --- CONSTANTS ---
@@ -71,8 +77,24 @@ const PERSONALITIES = [
   { name: "Chloe", emoji: "💅", description: "Dry-witted, zero-filter big sister." }
 ];
 
+const CATEGORY_COLORS: Record<string, string> = {
+  'Deep Work': '#10b981', // Emerald
+  'Research': '#3b82f6',  // Blue
+  'Leisure': '#eab308',   // Yellow
+  'Distraction': '#ef4444',// Red
+  'Neutral': '#6b7280',   // Gray
+};
+
 const getQuadrantColor = (quadrant: number) => {
   switch (quadrant) { case 1: return 'bg-red-500'; case 2: return 'bg-blue-500'; case 3: return 'bg-yellow-500'; case 4: return 'bg-gray-500'; default: return 'bg-gray-500'; }
+};
+
+const formatTimeDuration = (seconds: number) => {
+    if (seconds < 60) return `${seconds}s`;
+    const m = Math.floor(seconds / 60);
+    const h = Math.floor(m / 60);
+    if (h > 0) return `${h}h ${m % 60}m`;
+    return `${m}m`;
 };
 
 export default function App() {
@@ -86,6 +108,7 @@ export default function App() {
     ram_used: '0.00 GB',
     ram_percent: 0,
   });
+  const [telemetryStats, setTelemetryStats] = useState<TelemetryStats | null>(null);
   
   // --- AI CONFIG STATE ---
   const [selectedTier, setSelectedTier] = useState<string>('General');
@@ -195,7 +218,7 @@ export default function App() {
   // When Selected Date changes, reload events for that month/week scope
   useEffect(() => { loadCalendarEvents(); }, [selectedDate]);
 
-  // --- TELEMETRY POLLING EFFECT ---
+  // --- TELEMETRY POLLING EFFECT (RAM) ---
   useEffect(() => {
     let intervalId: number;
     if (activeTab === 'telemetry') {
@@ -207,9 +230,26 @@ export default function App() {
           console.error("Telemetry error:", e);
         }
       };
-      
-      fetchTelemetry(); // Fetch immediately on tab open
-      intervalId = window.setInterval(fetchTelemetry, 2000); // Ping every 2 seconds
+      fetchTelemetry(); 
+      intervalId = window.setInterval(fetchTelemetry, 2000); 
+    }
+    return () => clearInterval(intervalId);
+  }, [activeTab]);
+
+  // --- OBSERVER STATS POLLING EFFECT (Dashboards) ---
+  useEffect(() => {
+    let intervalId: number | undefined;
+    if (activeTab === 'stats' || activeTab === 'dashboard') {
+      const fetchStats = async () => {
+        try {
+          const data = await invoke<TelemetryStats>('get_telemetry_stats');
+          setTelemetryStats(data);
+        } catch (e) {
+          console.error("Stats Telemetry Error:", e);
+        }
+      };
+      fetchStats();
+      intervalId = window.setInterval(fetchStats, 10000); // Refresh stats every 10s
     }
     return () => clearInterval(intervalId);
   }, [activeTab]);
@@ -585,7 +625,6 @@ export default function App() {
     }
   };
 
-
   // --- CHAT EFFECTS ---
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [chatHistory, isTyping]);
   useEffect(() => { const flushMemory = async () => { try { await invoke('flush_vram', { modelTier: selectedTier }); } catch (e) { console.error(e); } }; flushMemory(); }, [selectedTier]);
@@ -816,8 +855,9 @@ export default function App() {
             <SidebarItem icon={<FileText />} label="Meeting Summaries" active={activeTab === 'summaries'} onClick={() => setActiveTab('summaries')} />
             
             <div className="mt-4 mb-1 px-2"><span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">System</span></div>
-            <SidebarItem icon={<PieChart />} label="Stats & Analysis" active={activeTab === 'stats'} onClick={() => setActiveTab('stats')} />
+            <SidebarItem icon={<PieChartIcon />} label="Stats & Analysis" active={activeTab === 'stats'} onClick={() => setActiveTab('stats')} />
             <SidebarItem icon={<Activity />} label="Daemon Telemetry" active={activeTab === 'telemetry'} onClick={() => setActiveTab('telemetry')} />
+            <SidebarItem icon={<Info />} label="About & Philosophy" active={activeTab === 'about'} onClick={() => setActiveTab('about')} />
           </div>
 
           <div className="p-3 border-t border-gray-800 flex-shrink-0">
@@ -981,184 +1021,272 @@ export default function App() {
           {/* 0. STARTUP DASHBOARD - REDESIGNED */}
           {activeTab === 'dashboard' && (
             <div className="flex-1 overflow-y-auto custom-scrollbar">
-              <div className="max-w-7xl w-full mx-auto px-8 py-8 flex flex-col lg:flex-row gap-6 h-full min-h-[800px]">
+              <div className="max-w-[1400px] w-full mx-auto px-6 py-6 flex flex-col lg:flex-row gap-6 h-full min-h-[800px]">
                 
-                {/* Left Side: General Widgets */}
-                <div className="flex-1 flex flex-col gap-6">
-                  <div className="mb-2">
-                    <h1 className="text-4xl font-bold text-gray-100 mb-2">Welcome to Omni-Core.</h1>
-                    <p className="text-gray-400">System optimized. Ready to initiate protocol.</p>
-                  </div>
-
-                  {/* AI Input */}
-                  <div className="relative flex items-center bg-[#171717] rounded-2xl border border-gray-700 focus-within:border-emerald-500/50 transition-colors shadow-lg shadow-black/20">
-                    <div className="p-4 ml-2 text-emerald-500"><BrainCircuit className="w-6 h-6" /></div>
-                    <input 
-                      type="text" 
-                      value={dashInput} 
-                      onChange={(e) => setDashInput(e.target.value)} 
-                      onKeyDown={(e) => e.key === 'Enter' && handleSendMessage(dashInput)} 
-                      placeholder="Ask Omni-Core to analyze a topic, schedule a task, or draft an email..." 
-                      className="flex-1 bg-transparent px-2 py-5 outline-none text-gray-100 placeholder-gray-500 text-[16px]" 
-                    />
-                  </div>
-
-                  {/* Focus & Quote Row */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="bg-[#171717] border border-gray-800 rounded-2xl p-5 flex flex-col justify-center relative overflow-hidden group z-0">
-                      <Quote className="absolute -right-4 -bottom-4 w-24 h-24 text-gray-800/20 group-hover:text-gray-700/30 transition-colors pointer-events-none z-0" />
-                      <p className="text-gray-300 italic text-sm leading-relaxed relative z-10 transition-opacity duration-500">"{QUOTES[quoteIndex]}"</p>
-                    </div>
-                    
-                    <div onClick={() => setActiveTab('focus')} className="bg-[#171717] border border-gray-800 hover:border-gray-600 rounded-2xl p-5 cursor-pointer transition-colors flex items-center justify-between">
+                {/* LEFT COLUMN: Main content */}
+                <div className="flex-1 flex flex-col gap-5 min-w-0">
+                  {/* Header & Prompt */}
+                  <div className="flex flex-col gap-4">
+                    <div className="flex justify-between items-end">
                       <div>
-                        <h3 className="text-sm font-semibold text-gray-400 mb-1 flex items-center gap-2"><Timer className="w-4 h-4"/> Deep Work</h3>
-                        <p className="text-3xl font-mono font-bold text-gray-100 mt-2">
+                        <h1 className="text-3xl font-bold text-gray-100 tracking-tight mb-1">Welcome to Omni-Core.</h1>
+                        <p className="text-sm text-gray-400">System optimized. Ready to initiate protocol.</p>
+                      </div>
+                      <div className="text-[10px] text-gray-600 font-mono text-right hidden sm:block">
+                        Omni-Core © 2026 Koundinya Gajulapalli.<br/>Licensed under GPL v3.
+                      </div>
+                    </div>
+
+                    {/* AI Input */}
+                    <div className="relative flex items-center bg-[#171717] rounded-xl border border-gray-800 focus-within:border-emerald-500/50 transition-colors shadow-lg">
+                      <div className="p-3 ml-2 text-emerald-500"><BrainCircuit className="w-5 h-5" /></div>
+                      <input 
+                        type="text" 
+                        value={dashInput} 
+                        onChange={(e) => setDashInput(e.target.value)} 
+                        onKeyDown={(e) => e.key === 'Enter' && handleSendMessage(dashInput)} 
+                        placeholder="Ask Omni-Core to analyze a topic, schedule a task, or draft an email..." 
+                        className="flex-1 bg-transparent px-2 py-3.5 outline-none text-gray-100 placeholder-gray-500 text-sm" 
+                      />
+                    </div>
+                  </div>
+
+                  {/* ROW 1: Quick Stats (3 columns) */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                    {/* Focus Timer */}
+                    <div onClick={() => setActiveTab('focus')} className="bg-[#171717] border border-gray-800 hover:border-gray-600 rounded-xl p-4 cursor-pointer transition-colors flex flex-col justify-between h-32 relative overflow-hidden group">
+                      <div className="absolute -right-4 -bottom-4 w-20 h-20 bg-emerald-500/10 rounded-full blur-xl group-hover:bg-emerald-500/20 transition-colors"></div>
+                      <h3 className="text-xs font-semibold text-gray-400 flex items-center gap-2 uppercase tracking-wider"><Timer className="w-3.5 h-3.5"/> Deep Work</h3>
+                      <div className="flex items-end justify-between">
+                        <p className="text-3xl font-mono font-bold text-gray-100">
                           {Math.floor(focusTimeLeft / 60).toString().padStart(2, '0')}:{(focusTimeLeft % 60).toString().padStart(2, '0')}
                         </p>
+                        <PlayCircle className="w-6 h-6 text-emerald-500 mb-1"/>
                       </div>
-                      <div className="w-12 h-12 rounded-full bg-[#2f2f2f] flex items-center justify-center"><PlayCircle className="w-6 h-6 text-emerald-500"/></div>
                     </div>
-                  </div>
 
-                  {/* Matrix & Logs Row */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                     <div onClick={() => setActiveTab('matrix')} className="bg-[#171717] border border-gray-800 hover:border-gray-600 rounded-2xl p-5 cursor-pointer transition-colors flex flex-col h-64">
-                       <h3 className="text-sm font-semibold text-gray-400 mb-3 flex items-center gap-2"><CheckSquare className="w-4 h-4"/> Next Actions</h3>
-                       <div className="space-y-2 flex-1 overflow-hidden">
-                         {tasks.filter(t => !t.completed).slice(0, 4).map(t => (
-                           <div key={t.id} className="flex items-center gap-2 text-sm text-gray-300">
-                             <div className={`w-2 h-2 rounded-full shrink-0 ${getQuadrantColor(t.quadrant)}`}></div>
-                             <span className="truncate">{t.title}</span>
+                    {/* Quote */}
+                    <div className="bg-[#171717] border border-gray-800 rounded-xl p-4 flex flex-col justify-center relative overflow-hidden h-32">
+                      <Quote className="absolute -right-2 -bottom-2 w-16 h-16 text-gray-800/30 pointer-events-none" />
+                      <p className="text-gray-300 italic text-sm leading-relaxed relative z-10">"{QUOTES[quoteIndex]}"</p>
+                    </div>
+
+                    {/* Recent Logs */}
+                    <div onClick={() => setActiveTab('chat')} className="bg-[#171717] border border-gray-800 hover:border-gray-600 rounded-xl p-4 cursor-pointer transition-colors flex flex-col h-32">
+                       <h3 className="text-xs font-semibold text-gray-400 mb-2 flex items-center gap-2 uppercase tracking-wider"><MessageSquare className="w-3.5 h-3.5"/> Neural Logs</h3>
+                       <div className="text-xs text-gray-300 flex-1 overflow-hidden flex flex-col gap-1.5 mt-1">
+                         {chatSessions.slice(0, 3).map((session, idx) => (
+                           <div key={idx} className="flex items-center gap-2 opacity-80">
+                              <div className="w-1 h-1 rounded-full bg-emerald-500 shrink-0"></div>
+                              <span className="truncate">{session.title}</span>
                            </div>
-                         ))}
-                         {tasks.filter(t => !t.completed).length === 0 && <p className="text-gray-600 text-sm italic">No pending tasks.</p>}
-                       </div>
-                     </div>
-
-                     <div onClick={() => setActiveTab('chat')} className="bg-[#171717] border border-gray-800 hover:border-gray-600 rounded-2xl p-5 cursor-pointer transition-colors flex flex-col h-64">
-                       <h3 className="text-sm font-semibold text-gray-400 mb-3 flex items-center gap-2"><MessageSquare className="w-4 h-4"/> Recent Neural Logs</h3>
-                       <div className="text-sm text-gray-300 space-y-2 flex-1 overflow-hidden">
-                         {chatSessions.slice(0, 4).map((session, idx) => (
-                           <p key={idx} className="truncate opacity-80 text-emerald-400/80 font-medium">↳ {session.title}</p>
                          ))}
                          {chatSessions.length === 0 && <p className="text-gray-600 italic">No recent chats.</p>}
                        </div>
+                    </div>
+                  </div>
+
+                  {/* ROW 2: Matrix & Goals */}
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+                    {/* Matrix (span 2) */}
+                    <div onClick={() => setActiveTab('matrix')} className="lg:col-span-2 bg-[#171717] border border-gray-800 hover:border-gray-600 rounded-xl p-5 cursor-pointer transition-colors flex flex-col h-56 relative overflow-hidden">
+                      <div className="absolute top-0 right-0 w-32 h-32 bg-red-500/5 rounded-bl-full pointer-events-none"></div>
+                      <div className="flex justify-between items-center mb-4">
+                        <h3 className="text-sm font-semibold text-gray-200 flex items-center gap-2"><CheckSquare className="w-4 h-4 text-emerald-500"/> Next Actions Matrix</h3>
+                        <span className="text-xs font-mono text-gray-500">{tasks.filter(t => !t.completed).length} Pending</span>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2 flex-1 overflow-y-auto custom-scrollbar pr-2">
+                         {tasks.filter(t => !t.completed).slice(0, 8).map(t => (
+                           <div key={t.id} className="flex items-start gap-2.5 text-sm text-gray-300 py-1.5 border-b border-gray-800/50 last:border-0">
+                             <div className={`w-2 h-2 rounded-full shrink-0 mt-1.5 ${getQuadrantColor(t.quadrant)}`}></div>
+                             <span className="line-clamp-2 leading-snug">{t.title}</span>
+                           </div>
+                         ))}
+                         {tasks.filter(t => !t.completed).length === 0 && <p className="text-gray-600 text-sm italic col-span-2 text-center mt-8">Matrix clear. No pending tasks.</p>}
+                      </div>
+                    </div>
+
+                    {/* Goals (span 1) */}
+                    <div onClick={() => setActiveTab('goals')} className="lg:col-span-1 bg-[#171717] border border-gray-800 hover:border-gray-600 rounded-xl p-5 cursor-pointer transition-colors flex flex-col h-56 relative overflow-hidden">
+                      <div className="absolute top-0 right-0 w-24 h-24 bg-blue-500/5 rounded-bl-full pointer-events-none"></div>
+                      <h3 className="text-sm font-semibold text-gray-200 flex items-center gap-2 mb-2"><Target className="w-4 h-4 text-blue-500"/> Goal Trajectory</h3>
+                      <div className="flex-1 flex flex-col items-center justify-center text-gray-600">
+                         <BrainCircuit className="w-8 h-8 mb-3 opacity-30" />
+                         <p className="text-sm font-medium text-gray-400">Predictive Pipeline</p>
+                         <p className="text-[10px] text-gray-500 mt-1 text-center max-w-[90%] uppercase tracking-wider">Awaiting neural integration</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* ROW 3: Wide Telemetry Chart - BENTO BOX STYLE */}
+                  <div onClick={() => setActiveTab('stats')} className="bg-[#171717] border border-gray-800 hover:border-gray-600 rounded-2xl p-6 cursor-pointer transition-all flex flex-col sm:flex-row gap-8 min-h-[320px] relative overflow-hidden mb-4 group shadow-md hover:shadow-lg">
+                     <div className="absolute top-0 left-0 w-64 h-64 bg-emerald-500/5 rounded-br-[100px] pointer-events-none group-hover:bg-emerald-500/10 transition-colors duration-500"></div>
+                     
+                     {/* Telemetry KPI Left Side */}
+                     <div className="w-full sm:w-1/3 flex flex-col justify-between relative z-10 shrink-0">
+                        <div>
+                          <h3 className="text-sm font-semibold text-gray-200 flex items-center gap-2 mb-1.5"><BarChart3 className="w-4 h-4 text-emerald-500"/> Observer Telemetry</h3>
+                          <p className="text-xs text-gray-500 leading-relaxed mb-6">Real-time immutable behavioral logs analyzing your screen focus.</p>
+                        </div>
+
+                        {telemetryStats ? (
+                          <div className="flex flex-col gap-3 mt-auto">
+                              <div className="bg-[#212121]/80 backdrop-blur-sm rounded-xl p-4 border border-gray-800 shadow-inner group-hover:border-emerald-500/30 transition-colors">
+                                  <div className="flex justify-between items-center mb-1">
+                                      <p className="text-[10px] text-gray-500 uppercase tracking-wider font-bold">Deep Work Today</p>
+                                      <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
+                                  </div>
+                                  <p className="text-2xl font-bold text-emerald-400 font-mono tracking-tight">{formatTimeDuration(telemetryStats.today['Deep Work'] || 0)}</p>
+                              </div>
+                              <div className="bg-[#212121]/80 backdrop-blur-sm rounded-xl p-4 border border-gray-800 shadow-inner">
+                                  <p className="text-[10px] text-gray-500 uppercase tracking-wider font-bold mb-1">Distraction</p>
+                                  <p className="text-xl font-bold text-red-400 font-mono tracking-tight">{formatTimeDuration(telemetryStats.today['Distraction'] || 0)}</p>
+                              </div>
+                          </div>
+                        ) : (
+                          <div className="flex-1 flex flex-col items-center justify-center gap-3 bg-[#212121]/50 rounded-xl border border-gray-800 border-dashed">
+                              <Activity className="w-5 h-5 text-emerald-500/50 animate-spin" />
+                              <span className="text-[10px] text-gray-500 font-mono uppercase tracking-widest">Syncing Hooks...</span>
+                          </div>
+                        )}
+                     </div>
+
+                     {/* Telemetry Chart Right Side */}
+                     <div className="w-full sm:w-2/3 h-64 sm:h-auto relative z-10 min-w-0">
+                        {telemetryStats ? (
+                          <ResponsiveContainer width="100%" height="100%">
+                              <BarChart data={telemetryStats.historical} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+                                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} opacity={0.4} />
+                                  <XAxis dataKey="date" stroke="#6b7280" fontSize={10} tickLine={false} axisLine={false} tickFormatter={(val) => { const d = new Date(val); return `${d.getMonth()+1}/${d.getDate()}`; }} dy={10} />
+                                  <YAxis stroke="#6b7280" fontSize={10} tickLine={false} axisLine={false} tickFormatter={(v) => { const h = Math.floor(v/3600); return h > 0 ? `${h}h` : ''; }} dx={-5} />
+                                  <Tooltip cursor={{fill: '#2f2f2f', opacity: 0.4}} contentStyle={{ backgroundColor: '#1a1a1a', borderColor: '#374151', color: '#fff', fontSize: '11px', borderRadius: '8px', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.5)' }} formatter={(value: any) => formatTimeDuration(Number(value))} />
+                                  <Bar dataKey="Deep Work" stackId="a" fill={CATEGORY_COLORS['Deep Work']} radius={[0, 0, 4, 4]} maxBarSize={40} />
+                                  <Bar dataKey="Research" stackId="a" fill={CATEGORY_COLORS['Research']} maxBarSize={40} />
+                                  <Bar dataKey="Distraction" stackId="a" fill={CATEGORY_COLORS['Distraction']} radius={[4, 4, 0, 0]} maxBarSize={40} />
+                              </BarChart>
+                          </ResponsiveContainer>
+                        ) : (
+                           <div className="w-full h-full border border-dashed border-gray-800 rounded-xl flex flex-col items-center justify-center text-gray-600 gap-3">
+                              <BarChart3 className="w-8 h-8 opacity-20" />
+                              <span className="text-[10px] font-mono uppercase tracking-widest opacity-50">Awaiting Array Matrix</span>
+                           </div>
+                        )}
                      </div>
                   </div>
+
                 </div>
 
-                {/* Right Side: Tall Calendar & Trajectory Module */}
-                <div className="w-full lg:w-[400px] flex flex-col gap-4 flex-shrink-0 h-full">
-                   
-                   {/* NEW: Music Player Widget */}
-                   <div className="bg-[#171717] border border-gray-800 rounded-2xl p-4 flex flex-col shrink-0 relative overflow-hidden group shadow-lg">
-                      {/* Animated gradient background if playing */}
-                      {isMusicPlaying && currentSong && <div className="absolute inset-0 opacity-10 bg-gradient-to-br from-emerald-500/20 to-transparent pointer-events-none"></div>}
-                      
-                      <div className="flex justify-between items-center mb-3 relative z-10">
-                         <h3 className="text-sm font-semibold text-gray-400 flex items-center gap-2 cursor-pointer hover:text-emerald-400 transition-colors" onClick={() => setActiveTab('music')}><Music className="w-4 h-4"/> Music</h3>
-                      </div>
-                      
-                      {currentSong ? (
-                         <div className="flex flex-col relative z-10">
-                            <div className="flex items-center gap-4 mb-3">
-                               <div className="relative shrink-0">
-                                  <img src={currentSong.thumbnails[0]?.url} alt="cover" className="w-14 h-14 rounded-full object-cover shadow-md animate-[spin_10s_linear_infinite] border border-gray-700" style={{ animationPlayState: isMusicPlaying ? 'running' : 'paused' }} />
-                                  <div className="absolute inset-0 rounded-full border border-emerald-500/30"></div>
-                                  <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-3 h-3 bg-[#171717] rounded-full border border-gray-600"></div>
-                               </div>
-                               <div className="flex-1 min-w-0">
-                                  <p className="text-sm font-bold text-emerald-400 truncate cursor-pointer hover:underline" onClick={() => setActiveTab('music')}>{currentSong.title}</p>
-                                  <p className="text-xs text-gray-500 truncate">{currentSong.artists.map(a => a.name).join(', ')}</p>
-                               </div>
-                            </div>
-                            
-                            <div className="flex items-center justify-between gap-2 px-1">
-                               <span className="text-[9px] text-gray-500 font-mono w-6 text-right">{formatAudioTime(audioCurrentTime)}</span>
-                               <input type="range" min="0" max={audioDuration || 100} value={audioCurrentTime} onChange={handleSeek} className="flex-1 h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-emerald-500" />
-                               <span className="text-[9px] text-gray-500 font-mono w-6">{formatAudioTime(audioDuration)}</span>
-                            </div>
-
-                            <div className="flex justify-center items-center gap-5 mt-3">
-                               <button onClick={handlePrevSong} className="text-gray-400 hover:text-white transition-colors"><SkipBack className="w-4 h-4 fill-current" /></button>
-                               <button onClick={toggleMusicPlayPause} className="w-8 h-8 rounded-full bg-emerald-600 hover:bg-emerald-500 flex items-center justify-center text-white transition-colors shadow-lg shadow-emerald-900/40">
-                                 {isMusicPlaying ? <Pause className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 ml-1 fill-current" />}
-                               </button>
-                               <button onClick={handleNextSong} className="text-gray-400 hover:text-white transition-colors"><SkipForward className="w-4 h-4 fill-current" /></button>
-                            </div>
-                         </div>
-                      ) : (
-                         <div className="flex flex-col items-center justify-center h-24 opacity-40 cursor-pointer hover:opacity-80 transition-opacity" onClick={() => setActiveTab('music')}>
-                            <Music className="w-8 h-8 text-gray-500 mb-2" />
-                            <p className="text-xs text-gray-400 font-medium">No active playback</p>
-                         </div>
-                      )}
-                   </div>
-
-                   {/* Upcoming Intel */}
-                   <div onClick={() => setActiveTab('calendar')} className="bg-[#171717] border border-gray-800 hover:border-gray-600 rounded-2xl p-5 cursor-pointer transition-colors flex flex-col shrink-0">
-                     <h3 className="text-sm font-semibold text-gray-400 mb-3 flex items-center gap-2"><Palmtree className="w-4 h-4"/> Upcoming Intel</h3>
-                     <div className="text-sm text-gray-300 space-y-2 overflow-hidden">
-                       {upcomingEvents.length === 0 ? (
-                          <p className="text-gray-600 italic text-xs">No imminent holidays or deadlines.</p>
-                       ) : (
-                          upcomingEvents.slice(0,3).map(e => (
-                             <div key={e.id} className="flex items-center gap-2 text-xs truncate opacity-90 border-l-2 pl-2" style={{ borderColor: e.color }}>
-                                 <span className="text-gray-500 font-mono w-10 shrink-0">{new Date(e.start_time).toLocaleDateString([], {month: 'short', day: 'numeric'})}</span>
-                                 <span className="font-medium truncate">{e.title}</span>
+                {/* RIGHT COLUMN: Calendar & Music */}
+                <div className="w-full lg:w-[340px] flex flex-col gap-5 flex-shrink-0 h-full">
+                  
+                  {/* Music Player Widget */}
+                  <div className="bg-[#171717] border border-gray-800 rounded-xl p-4 flex flex-col shrink-0 relative overflow-hidden group shadow-lg">
+                    {/* Animated gradient background if playing */}
+                    {isMusicPlaying && currentSong && <div className="absolute inset-0 opacity-10 bg-gradient-to-br from-emerald-500/20 to-transparent pointer-events-none"></div>}
+                    
+                    <div className="flex justify-between items-center mb-3 relative z-10">
+                       <h3 className="text-sm font-semibold text-gray-400 flex items-center gap-2 cursor-pointer hover:text-emerald-400 transition-colors" onClick={() => setActiveTab('music')}><Music className="w-4 h-4"/> Music</h3>
+                    </div>
+                    
+                    {currentSong ? (
+                       <div className="flex flex-col relative z-10">
+                          <div className="flex items-center gap-4 mb-3">
+                             <div className="relative shrink-0">
+                                <img src={currentSong.thumbnails[0]?.url} alt="cover" className="w-14 h-14 rounded-full object-cover shadow-md animate-[spin_10s_linear_infinite] border border-gray-700" style={{ animationPlayState: isMusicPlaying ? 'running' : 'paused' }} />
+                                <div className="absolute inset-0 rounded-full border border-emerald-500/30"></div>
+                                <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-3 h-3 bg-[#171717] rounded-full border border-gray-600"></div>
                              </div>
-                          ))
-                       )}
-                     </div>
-                   </div>
+                             <div className="flex-1 min-w-0">
+                                <p className="text-sm font-bold text-emerald-400 truncate cursor-pointer hover:underline" onClick={() => setActiveTab('music')}>{currentSong.title}</p>
+                                <p className="text-xs text-gray-500 truncate">{currentSong.artists.map(a => a.name).join(', ')}</p>
+                             </div>
+                          </div>
+                          
+                          <div className="flex items-center justify-between gap-2 px-1">
+                             <span className="text-[9px] text-gray-500 font-mono w-6 text-right">{formatAudioTime(audioCurrentTime)}</span>
+                             <input type="range" min="0" max={audioDuration || 100} value={audioCurrentTime} onChange={handleSeek} className="flex-1 h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-emerald-500" />
+                             <span className="text-[9px] text-gray-500 font-mono w-6">{formatAudioTime(audioDuration)}</span>
+                          </div>
 
-                   {/* Today's Trajectory (Expands to fill vertical space) */}
-                   <div className="bg-[#171717] border border-gray-800 rounded-2xl p-5 flex flex-col flex-1 overflow-hidden relative min-h-[300px]">
-                      <div className="flex justify-between items-center mb-4 shrink-0">
-                         <h3 className="text-sm font-semibold text-gray-400 flex items-center gap-2"><Layers className="w-4 h-4 text-emerald-500"/> Today's Trajectory</h3>
-                         <button onClick={() => setActiveTab('calendar')} className="text-xs font-medium text-emerald-500 hover:text-emerald-400">Full Calendar</button>
-                      </div>
-                      
-                      <div className="flex-1 overflow-y-auto custom-scrollbar relative pr-2">
-                          {todayEvents.length === 0 ? (
-                              <div className="flex flex-col items-center justify-center h-full opacity-50">
-                                  <Calendar className="w-8 h-8 text-gray-600 mb-2" />
-                                  <p className="text-sm text-gray-500">No time-blocks scheduled for today.</p>
-                              </div>
-                          ) : (
-                              <div className="flex flex-col gap-3 pb-4">
-                                  {todayEvents.map((e, idx) => {
-                                      const start = new Date(e.start_time);
-                                      const end = new Date(e.end_time);
-                                      const isPast = end < new Date();
-                                      const isCurrent = start <= new Date() && end >= new Date();
-                                      
-                                      return (
-                                          <div key={e.id} onClick={() => {setActiveTab('calendar'); setSelectedDate(start);}} className={`flex items-start gap-4 p-3 rounded-xl border border-gray-800 cursor-pointer transition-all ${isPast ? 'opacity-40 hover:opacity-100 bg-[#212121]' : isCurrent ? 'bg-[#2f2f2f] border-gray-600 shadow-md scale-[1.01]' : 'bg-[#1a1a1a] hover:bg-[#2f2f2f]'}`}>
-                                             <div className="flex flex-col items-center justify-center w-16 shrink-0 border-r border-gray-700/50 pr-4">
-                                                <span className={`text-xs font-bold ${isCurrent ? 'text-emerald-400' : 'text-gray-400'}`}>{start.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
-                                                <span className="text-[10px] text-gray-600">{end.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
-                                             </div>
-                                             <div className="flex-1 min-w-0 flex flex-col justify-center">
-                                                <div className="flex items-center gap-2">
-                                                   <div className="w-2 h-2 rounded-full" style={{backgroundColor: e.color}}></div>
-                                                   <h4 className={`text-sm font-semibold truncate ${isCurrent ? 'text-white' : 'text-gray-300'}`}>{e.title}</h4>
-                                                </div>
-                                                {e.tags.length > 0 && (
-                                                   <div className="flex gap-1 mt-1 flex-wrap">
-                                                       {e.tags.map(t => <span key={t} className="text-[9px] px-1.5 bg-black/30 rounded text-gray-400 uppercase">{t}</span>)}
-                                                   </div>
-                                                )}
-                                             </div>
-                                             {isCurrent && <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse mt-2 shadow-[0_0_8px_rgba(16,185,129,0.8)]"></div>}
-                                          </div>
-                                      );
-                                  })}
-                              </div>
-                          )}
-                      </div>
+                          <div className="flex justify-center items-center gap-5 mt-3">
+                             <button onClick={handlePrevSong} className="text-gray-400 hover:text-white transition-colors"><SkipBack className="w-4 h-4 fill-current" /></button>
+                             <button onClick={toggleMusicPlayPause} className="w-8 h-8 rounded-full bg-emerald-600 hover:bg-emerald-500 flex items-center justify-center text-white transition-colors shadow-lg shadow-emerald-900/40">
+                               {isMusicPlaying ? <Pause className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 ml-1 fill-current" />}
+                             </button>
+                             <button onClick={handleNextSong} className="text-gray-400 hover:text-white transition-colors"><SkipForward className="w-4 h-4 fill-current" /></button>
+                          </div>
+                       </div>
+                    ) : (
+                       <div className="flex flex-col items-center justify-center h-24 opacity-40 cursor-pointer hover:opacity-80 transition-opacity" onClick={() => setActiveTab('music')}>
+                          <Music className="w-8 h-8 text-gray-500 mb-2" />
+                          <p className="text-xs text-gray-400 font-medium">No active playback</p>
+                       </div>
+                    )}
+                 </div>
+
+                 {/* Upcoming Intel */}
+                 <div onClick={() => setActiveTab('calendar')} className="bg-[#171717] border border-gray-800 hover:border-gray-600 rounded-xl p-5 cursor-pointer transition-colors flex flex-col shrink-0">
+                   <h3 className="text-sm font-semibold text-gray-400 mb-3 flex items-center gap-2"><Palmtree className="w-4 h-4"/> Upcoming Intel</h3>
+                   <div className="text-sm text-gray-300 space-y-2 overflow-hidden">
+                     {upcomingEvents.length === 0 ? (
+                        <p className="text-gray-600 italic text-xs">No imminent holidays or deadlines.</p>
+                     ) : (
+                        upcomingEvents.slice(0,3).map(e => (
+                           <div key={e.id} className="flex items-center gap-2 text-xs truncate opacity-90 border-l-2 pl-2" style={{ borderColor: e.color }}>
+                               <span className="text-gray-500 font-mono w-10 shrink-0">{new Date(e.start_time).toLocaleDateString([], {month: 'short', day: 'numeric'})}</span>
+                               <span className="font-medium truncate">{e.title}</span>
+                           </div>
+                        ))
+                     )}
                    </div>
+                 </div>
+
+                 {/* Today's Trajectory (Expands to fill vertical space) */}
+                 <div className="bg-[#171717] border border-gray-800 rounded-xl p-5 flex flex-col flex-1 overflow-hidden relative min-h-[300px]">
+                    <div className="flex justify-between items-center mb-4 shrink-0">
+                       <h3 className="text-sm font-semibold text-gray-400 flex items-center gap-2"><Layers className="w-4 h-4 text-emerald-500"/> Today's Trajectory</h3>
+                       <button onClick={() => setActiveTab('calendar')} className="text-xs font-medium text-emerald-500 hover:text-emerald-400">Full Calendar</button>
+                    </div>
+                    
+                    <div className="flex-1 overflow-y-auto custom-scrollbar relative pr-2">
+                        {todayEvents.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center h-full opacity-50">
+                                <Calendar className="w-8 h-8 text-gray-600 mb-2" />
+                                <p className="text-sm text-gray-500">No time-blocks scheduled for today.</p>
+                            </div>
+                        ) : (
+                            <div className="flex flex-col gap-3 pb-4">
+                                {todayEvents.map((e, idx) => {
+                                    const start = new Date(e.start_time);
+                                    const end = new Date(e.end_time);
+                                    const isPast = end < new Date();
+                                    const isCurrent = start <= new Date() && end >= new Date();
+                                    
+                                    return (
+                                        <div key={e.id} onClick={() => {setActiveTab('calendar'); setSelectedDate(start);}} className={`flex items-start gap-4 p-3 rounded-xl border border-gray-800 cursor-pointer transition-all ${isPast ? 'opacity-40 hover:opacity-100 bg-[#212121]' : isCurrent ? 'bg-[#2f2f2f] border-gray-600 shadow-md scale-[1.01]' : 'bg-[#1a1a1a] hover:bg-[#2f2f2f]'}`}>
+                                           <div className="flex flex-col items-center justify-center w-16 shrink-0 border-r border-gray-700/50 pr-4">
+                                              <span className={`text-xs font-bold ${isCurrent ? 'text-emerald-400' : 'text-gray-400'}`}>{start.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                                              <span className="text-[10px] text-gray-600">{end.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                                           </div>
+                                           <div className="flex-1 min-w-0 flex flex-col justify-center">
+                                              <div className="flex items-center gap-2">
+                                                 <div className="w-2 h-2 rounded-full" style={{backgroundColor: e.color}}></div>
+                                                 <h4 className={`text-sm font-semibold truncate ${isCurrent ? 'text-white' : 'text-gray-300'}`}>{e.title}</h4>
+                                              </div>
+                                              {e.tags.length > 0 && (
+                                                 <div className="flex gap-1 mt-1 flex-wrap">
+                                                     {e.tags.map(t => <span key={t} className="text-[9px] px-1.5 bg-black/30 rounded text-gray-400 uppercase">{t}</span>)}
+                                                 </div>
+                                              )}
+                                           </div>
+                                           {isCurrent && <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse mt-2 shadow-[0_0_8px_rgba(16,185,129,0.8)]"></div>}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
+                 </div>
                 </div>
 
               </div>
@@ -2246,8 +2374,234 @@ export default function App() {
             </div>
           )}
 
-          {/* RESTORED WIP TABS (Goals, Stats, Timetable, Flashcards, Summaries) */}
-          {['goals', 'stats', 'timetable', 'flashcards', 'summaries'].includes(activeTab) && (
+          {/* --------------------------------------------------------- */}
+          {/* THE OBSERVER EFFECT: STATS & ANALYSIS DASHBOARD */}
+          {/* --------------------------------------------------------- */}
+          {activeTab === 'stats' && (
+            <div className="flex-1 overflow-y-auto custom-scrollbar bg-[#1a1a1a]">
+              {!telemetryStats ? (
+                  <div className="flex flex-col items-center justify-center h-full text-emerald-500 opacity-80">
+                      <Activity className="w-12 h-12 mb-4 animate-spin" />
+                      <h2 className="text-xl font-mono tracking-widest">AGGREGATING TELEMETRY</h2>
+                  </div>
+              ) : (
+                  <div className="max-w-7xl w-full mx-auto px-8 py-8 flex flex-col h-full animate-in fade-in duration-500">
+                      
+                      {/* Header */}
+                      <div className="flex justify-between items-end mb-8 border-b border-gray-800 pb-4">
+                          <div>
+                              <h1 className="text-3xl font-bold text-gray-100 flex items-center gap-3">
+                                  <BarChart3 className="text-emerald-500" /> Executive Analytics
+                              </h1>
+                              <p className="text-sm text-gray-400 mt-1 font-mono">THE OBSERVER EFFECT: IMMUTABLE LOGS</p>
+                          </div>
+                      </div>
+
+                      {/* Top KPI Cards (Today's Metrics) */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                          <div className="bg-[#171717] border border-gray-800 rounded-2xl p-5 shadow-lg shadow-emerald-900/5 relative overflow-hidden">
+                              <div className="absolute top-0 right-0 w-16 h-16 bg-emerald-500/10 rounded-bl-full"></div>
+                              <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Today's Deep Work</p>
+                              <p className="text-3xl font-bold text-emerald-400 font-mono">
+                                  {formatTimeDuration(telemetryStats.today['Deep Work'] || 0)}
+                              </p>
+                          </div>
+                          
+                          <div className="bg-[#171717] border border-gray-800 rounded-2xl p-5 shadow-lg relative overflow-hidden">
+                              <div className="absolute top-0 right-0 w-16 h-16 bg-red-500/10 rounded-bl-full"></div>
+                              <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Time Distracted</p>
+                              <p className="text-3xl font-bold text-red-400 font-mono">
+                                  {formatTimeDuration(telemetryStats.today['Distraction'] || 0)}
+                              </p>
+                          </div>
+
+                          <div className="bg-[#171717] border border-gray-800 rounded-2xl p-5 shadow-lg relative overflow-hidden">
+                              <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Research Time</p>
+                              <p className="text-3xl font-bold text-blue-400 font-mono">
+                                  {formatTimeDuration(telemetryStats.today['Research'] || 0)}
+                              </p>
+                          </div>
+
+                          <div className="bg-[#171717] border border-gray-800 rounded-2xl p-5 shadow-lg relative overflow-hidden flex items-center justify-between">
+                              <div>
+                                  <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">AI Injection</p>
+                                  <p className="text-sm font-medium text-emerald-500 flex items-center gap-1"><Brain className="w-4 h-4"/> Sync Active</p>
+                              </div>
+                              <div className="w-10 h-10 rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center animate-pulse">
+                                  <Activity className="w-5 h-5 text-emerald-400" />
+                              </div>
+                          </div>
+                      </div>
+
+                      {/* Charts Row */}
+                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+                          
+                          {/* 7-Day Historical Trend */}
+                          <div className="lg:col-span-2 bg-[#171717] border border-gray-800 rounded-2xl p-6 shadow-lg flex flex-col h-[400px]">
+                              <h3 className="text-sm font-bold text-gray-300 uppercase tracking-wider mb-6">7-Day Productivity Trend</h3>
+                              <div className="flex-1 w-full text-xs font-mono">
+                                  <ResponsiveContainer width="100%" height="100%">
+                                      <BarChart data={telemetryStats.historical} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+                                          <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} opacity={0.4} />
+                                          <XAxis dataKey="date" stroke="#6b7280" fontSize={10} tickLine={false} axisLine={false} tickFormatter={(val) => { const d = new Date(val); return `${d.getMonth()+1}/${d.getDate()}`; }} dy={10} />
+                                          <YAxis stroke="#6b7280" fontSize={10} tickLine={false} axisLine={false} tickFormatter={(v) => { const h = Math.floor(v/3600); return h > 0 ? `${h}h` : ''; }} dx={-5} />
+                                          <Tooltip cursor={{fill: '#2f2f2f', opacity: 0.4}} contentStyle={{ backgroundColor: '#1a1a1a', borderColor: '#374151', color: '#fff', fontSize: '11px', borderRadius: '8px', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.5)' }} formatter={(value: any) => formatTimeDuration(Number(value))} />
+                                          <Legend wrapperStyle={{ paddingTop: '20px' }}/>
+                                          <Bar dataKey="Deep Work" stackId="a" fill={CATEGORY_COLORS['Deep Work']} radius={[0, 0, 4, 4]} maxBarSize={40} />
+                                          <Bar dataKey="Research" stackId="a" fill={CATEGORY_COLORS['Research']} maxBarSize={40} />
+                                          <Bar dataKey="Leisure" stackId="a" fill={CATEGORY_COLORS['Leisure']} maxBarSize={40} />
+                                          <Bar dataKey="Neutral" stackId="a" fill={CATEGORY_COLORS['Neutral']} maxBarSize={40} />
+                                          <Bar dataKey="Distraction" stackId="a" fill={CATEGORY_COLORS['Distraction']} radius={[4, 4, 0, 0]} maxBarSize={40} />
+                                      </BarChart>
+                                  </ResponsiveContainer>
+                              </div>
+                          </div>
+
+                          {/* Today's Breakdown Pie */}
+                          <div className="bg-[#171717] border border-gray-800 rounded-2xl p-6 shadow-lg flex flex-col h-[400px]">
+                              <h3 className="text-sm font-bold text-gray-300 uppercase tracking-wider mb-2">Today's Ratio</h3>
+                              <div className="flex-1 w-full relative">
+                                  <ResponsiveContainer width="100%" height="100%">
+                                      <PieChart>
+                                          <Pie
+                                              data={Object.entries(telemetryStats.today).map(([name, value]) => ({ name, value })).filter(d => d.value > 0)}
+                                              cx="50%" cy="50%"
+                                              innerRadius={60} outerRadius={100}
+                                              paddingAngle={2}
+                                              dataKey="value"
+                                              stroke="none"
+                                          >
+                                              {Object.entries(telemetryStats.today).filter(([_, v]) => v > 0).map(([name], index) => (
+                                                  <Cell key={`cell-${index}`} fill={CATEGORY_COLORS[name] || '#fff'} />
+                                              ))}
+                                          </Pie>
+                                          <Tooltip 
+                                              contentStyle={{ backgroundColor: '#1a1a1a', borderColor: '#374151', color: '#fff', borderRadius: '8px' }}
+                                              formatter={(value: any) => formatTimeDuration(Number(value))}
+                                          />
+                                      </PieChart>
+                                  </ResponsiveContainer>
+                                  
+                                  {/* Center text for the donut chart */}
+                                  <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                                      <span className="text-[10px] text-gray-500 font-mono">TOTAL</span>
+                                      <span className="text-lg font-bold text-white">
+                                          {formatTimeDuration(Object.values(telemetryStats.today).reduce((a, b) => a + b, 0))}
+                                      </span>
+                                  </div>
+                              </div>
+                          </div>
+
+                      </div>
+
+                      {/* Top Applications Log */}
+                      <div className="bg-[#171717] border border-gray-800 rounded-2xl p-6 shadow-lg mb-8">
+                          <h3 className="text-sm font-bold text-gray-300 uppercase tracking-wider mb-4 flex items-center gap-2">
+                             <Activity className="w-4 h-4 text-emerald-500" /> Active Application Logs (Today)
+                          </h3>
+                          
+                          <div className="overflow-x-auto">
+                              <table className="w-full text-left border-collapse">
+                                  <thead>
+                                      <tr className="border-b border-gray-800 text-xs font-mono text-gray-500 uppercase tracking-wider">
+                                          <th className="pb-3 pl-2">Executable / App</th>
+                                          <th className="pb-3">Categorization</th>
+                                          <th className="pb-3 text-right pr-4">Time Spent</th>
+                                      </tr>
+                                  </thead>
+                                  <tbody>
+                                      {telemetryStats.top_apps.length === 0 ? (
+                                          <tr>
+                                              <td colSpan={3} className="py-8 text-center text-sm text-gray-500 italic">No telemetry data recorded yet today.</td>
+                                          </tr>
+                                      ) : (
+                                          telemetryStats.top_apps.map((app, idx) => (
+                                              <tr key={idx} className="border-b border-gray-800/50 hover:bg-[#2f2f2f]/30 transition-colors">
+                                                  <td className="py-3 pl-2 text-sm font-medium text-gray-200">{app.app_name}</td>
+                                                  <td className="py-3">
+                                                      <span className="text-xs font-mono px-2 py-1 rounded-md" style={{ backgroundColor: `${CATEGORY_COLORS[app.category]}20`, color: CATEGORY_COLORS[app.category] }}>
+                                                          {app.category}
+                                                      </span>
+                                                  </td>
+                                                  <td className="py-3 text-right pr-4 font-mono text-sm text-gray-400">
+                                                      {formatTimeDuration(app.time_spent)}
+                                                  </td>
+                                              </tr>
+                                          ))
+                                      )}
+                                  </tbody>
+                              </table>
+                          </div>
+                      </div>
+                      
+                      <div className="text-center text-[10px] text-gray-600 font-mono pb-8">
+                         Omni-Core © 2026 Koundinya Gajulapalli. Licensed under GPL v3.
+                      </div>
+                  </div>
+              )}
+            </div>
+          )}
+
+          {/* --------------------------------------------------------- */}
+          {/* ABOUT & PHILOSOPHY PAGE */}
+          {/* --------------------------------------------------------- */}
+          {activeTab === 'about' && (
+            <div className="flex-1 overflow-y-auto custom-scrollbar bg-[#1a1a1a]">
+              <div className="max-w-4xl w-full mx-auto px-8 py-12 flex flex-col h-full animate-in fade-in duration-500">
+                 
+                 <div className="flex items-center gap-4 mb-10 border-b border-gray-800 pb-6">
+                    <div className="p-3 bg-emerald-500/10 rounded-xl border border-emerald-500/20">
+                      <Info className="w-8 h-8 text-emerald-500" />
+                    </div>
+                    <div>
+                      <h1 className="text-3xl font-bold text-gray-100">Architecture & Philosophy</h1>
+                      <p className="text-sm text-gray-500 font-mono tracking-wide mt-1">OMNI-CORE DESKTOP PLATFORM</p>
+                    </div>
+                 </div>
+
+                 <div className="space-y-8 text-gray-300 text-sm leading-relaxed">
+                    
+                    <section className="bg-[#171717] border border-gray-800 rounded-2xl p-6 shadow-lg">
+                       <h2 className="text-lg font-bold text-emerald-400 mb-3 flex items-center gap-2"><Layers className="w-5 h-5"/> 1. Local-First Architecture (LFA)</h2>
+                       <p className="mb-3">Omni-Dashboard utilizes a strict Local-First Architecture. There are no API keys connecting to external servers, no cloud syncing, and zero external data harvesting.</p>
+                       <p>All application state (your tasks), vector search heuristics (how the AI finds information in your textbooks), user telemetry (what apps you are using), and chat context remain strictly confined to your laptop. It uses asynchronous Rust threads to prevent the user interface from freezing when the AI is processing heavy workloads.</p>
+                    </section>
+
+                    <section className="bg-[#171717] border border-gray-800 rounded-2xl p-6 shadow-lg">
+                       <h2 className="text-lg font-bold text-emerald-400 mb-3 flex items-center gap-2"><Activity className="w-5 h-5"/> 2. The Observer Effect</h2>
+                       <p className="mb-3">This is the psychological core of Omni-Dashboard, built specifically to combat procrastination. Psychology proves we work exponentially harder when we know we are being watched.</p>
+                       <ul className="list-disc pl-5 space-y-2 text-gray-400">
+                          <li><strong className="text-gray-200">The Silent Watcher:</strong> A detached, invisible loop runs continuously in the background of your computer, capturing the exact window title and executable name you are currently focused on.</li>
+                          <li><strong className="text-gray-200">Behavioral Categorization:</strong> Using an IDE or reading a PDF? Tagged as "Deep Work". Scrolling Twitter or YouTube? Tagged as "Distraction".</li>
+                          <li><strong className="text-gray-200">Immutable Persistence:</strong> This data is written into an unalterable database table. There is no delete button. You cannot hide your distractions from the system.</li>
+                          <li><strong className="text-gray-200">Live Memory Stream:</strong> Omni-Core rolls up your recent activity into a summary. When you ask the AI for advice, it secretly injects this data. The AI is fully aware of your real-time behavior and will proactively suggest breaks or harshly scold you if you've been slacking off.</li>
+                       </ul>
+                    </section>
+
+                    <section className="bg-[#171717] border border-gray-800 rounded-2xl p-6 shadow-lg">
+                       <h2 className="text-lg font-bold text-emerald-400 mb-3 flex items-center gap-2"><BrainCircuit className="w-5 h-5"/> 3. Autonomous Neural Action Bridge</h2>
+                       <p className="mb-3">Traditional AI chat systems are passive. Omni-Core uses a high-reliability Zero-Math Fuzzy Parsing Tag Execution Bridge to let the AI actually <em>do</em> work for you. By interpreting strict bracketed tags (e.g., <code className="bg-[#2f2f2f] px-1 rounded text-emerald-300">[ACT:TASK:1:Study]</code>), the AI can autonomously schedule calendar blocks, create priority tasks, and even start your Pomodoro timer without you clicking a single button.</p>
+                    </section>
+
+                    <section className="bg-[#171717] border border-gray-800 rounded-2xl p-6 shadow-lg">
+                       <h2 className="text-lg font-bold text-emerald-400 mb-3 flex items-center gap-2"><Book className="w-5 h-5"/> 4. Local RAG & Textbook Engine</h2>
+                       <p className="mb-3">Omni-Core handles massive academic textbook ingestion completely on-device. When you attach a textbook to the chat, the app extracts the important keywords from your question. It mathematically scores every page in the book, grabs the top 5 most relevant pages, and secretly feeds them to the AI before it answers.</p>
+                       <p>This forces the AI to cite specific page numbers from your actual textbook, completely eliminating fake answers (hallucinations) without requiring internet access.</p>
+                    </section>
+
+                 </div>
+                 
+                 <div className="mt-12 text-center text-xs text-gray-500 font-mono pt-6 border-t border-gray-800 pb-12">
+                    Copyright © 2026 Koundinya Gajulapalli.<br/>
+                    Licensed under GNU General Public License v3 (GPLv3).
+                 </div>
+
+              </div>
+            </div>
+          )}
+
+          {/* RESTORED WIP TABS (Goals, Timetable, Flashcards, Summaries) */}
+          {['goals', 'timetable', 'flashcards', 'summaries'].includes(activeTab) && (
             <div className="flex-1 flex flex-col items-center justify-center text-gray-500 p-8 text-center">
               <Activity className="w-12 h-12 mb-4 opacity-50" />
               <h2 className="text-2xl font-mono mb-2 uppercase tracking-widest text-gray-400">{activeTab} Module</h2>
@@ -2440,9 +2794,12 @@ export default function App() {
               </div>
             </div>
 
-            <div className="p-5 border-t border-gray-800 bg-[#171717] flex justify-end gap-3">
-              <button onClick={() => setIsSettingsOpen(false)} className="px-5 py-2.5 rounded-xl text-sm font-medium text-gray-400 hover:text-white hover:bg-[#2f2f2f] transition-colors">Cancel</button>
-              <button onClick={() => handleSaveSettings()} className="px-5 py-2.5 rounded-xl text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-500 shadow-lg shadow-emerald-900/20 transition-colors">Save Configurations</button>
+            <div className="p-4 border-t border-gray-800 bg-[#171717] flex justify-between items-center">
+              <span className="text-[10px] text-gray-500 font-mono ml-2">© 2026 Koundinya Gajulapalli (GPL v3)</span>
+              <div className="flex gap-3">
+                 <button onClick={() => setIsSettingsOpen(false)} className="px-5 py-2.5 rounded-xl text-sm font-medium text-gray-400 hover:text-white hover:bg-[#2f2f2f] transition-colors">Cancel</button>
+                 <button onClick={() => handleSaveSettings()} className="px-5 py-2.5 rounded-xl text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-500 shadow-lg shadow-emerald-900/20 transition-colors">Save Configurations</button>
+              </div>
             </div>
           </div>
         </div>
