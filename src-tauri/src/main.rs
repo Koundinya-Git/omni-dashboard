@@ -2656,16 +2656,12 @@ You may only use ONE tag per response.
 // Application entry point that initializes the database, launches the audio system, and registers Tauri commands.
 fn main() {
     // Initialize the database schema and create the shared connection that the app will use.
-    // This bootstrapping step is critical because nearly every backend command depends on the database existing
-    // and being populated with the right tables and default settings.
     let db_conn = init_db().expect("Failed to initialize SQLite database");
 
     // Create a channel that lets the UI and backend control audio playback from any thread.
     let (audio_tx, audio_rx) = mpsc::channel::<AudioCommand>();
 
     // Launch the background audio worker that plays incoming sound requests through Rodio.
-    // The worker listens on an mpsc channel and converts each incoming command into either playback or stop behavior.
-    // This design keeps TTS requests non-blocking and lets the app continue responding while sound plays in the background.
     thread::spawn(move || match rodio::OutputStream::try_default() {
         Ok((_stream, stream_handle)) => {
             if let Ok(mut sink) = rodio::Sink::try_new(&stream_handle) {
@@ -2693,22 +2689,17 @@ fn main() {
         Err(e) => println!("[AUDIO FATAL] OS denied audio output access: {}", e),
     });
 
-    // Construct the Tauri application shell and wire up the runtime services.
-    // This includes plugin initialization, state management, tray setup, event handling, and command registration.
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(DbState(Mutex::new(db_conn)))
         .manage(AudioState(Mutex::new(audio_tx)))
         .plugin(tauri_plugin_notification::init())
         .setup(|app| {
-            // Create the tray menu items used to control the app from the system tray.
-            // The quit action closes the application and the show action brings the main window back into view.
             let quit_i = MenuItem::with_id(app, "quit", "Shutdown Omni-Core", true, None::<&str>)?;
             let show_i =
                 MenuItem::with_id(app, "show", "Open Executive Dashboard", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&show_i, &quit_i])?;
 
-            // Build the tray icon and bind its menu actions to the Tauri app instance.
             let _tray = TrayIconBuilder::new()
                 .icon(app.default_window_icon().unwrap().clone())
                 .menu(&menu)
@@ -2716,7 +2707,6 @@ fn main() {
                     "quit" => app.exit(0),
                     "show" => {
                         if let Some(window) = app.get_webview_window("main") {
-                            // Restore the main window if it exists and bring it to the foreground.
                             window.show().unwrap();
                             window.set_focus().unwrap();
                         }
@@ -2738,20 +2728,20 @@ fn main() {
                             let title = window.title.to_lowercase();
                             
                             // Basic categorization logic (can be expanded later)
-                            let category = if app_name.contains("code") || app_name.contains("cursor") || title.contains("omni-core") || app_name.contains("terminal") || app_name.contains("vscode") || app_name.contains("pycharm") || app_name.contains("intellij") || app_name.contains("clion") || app_name.contains("webstorm") || app_name.contains("goland") || app_name.contains("rider") || app_name.contains("notepad++") || app_name.contains("sublime text") || app_name.contains("atom") || app_name.contains("vim") || app_name.contains("emacs") || app_name.contains("jetbrains") || app_name.contains("visual studio") || app_name.contains("xcode") || app_name.contains("android studio") || app_name.contains("eclipse") || app_name.contains("netbeans") || app_name.contains("brackets") || app_name.contains("komodo") || app_name.contains("bluefish") || app_name.contains("geany") || app_name.contains("textmate") || app_name.contains("ultraedit") || app_name.contains("textwrangler") || app_name.contains("bbedit") || app_name.contains("notepad") || app_name.contains("terminal") || app_name.contains("powershell") || app_name.contains("cmd") || app_name.contains("bash") || app_name.contains("zsh") || app_name.contains("fish") || app_name.contains("hyper") || app_name.contains("iterm") || app_name.contains("kitty") || app_name.contains("alacritty") || app_name.contains("terminator") || app_name.contains("guake") || app_name.contains("tilix") || app_name.contains("deepin-terminal") || app_name.contains("konsole") || app_name.contains("lxterminal") || app_name.contains("xfce4-terminal") || app_name.contains("terminology") || app_name.contains("tilda") || app_name.contains("cool-retro-term") || app_name.contains("terminus") || app_name.contains("termite") || app_name.contains("st") || app_name.contains("urxvt") || app_name.contains("rxvt") || app_name.contains("eterm") || app_name.contains("sakura") || app_name.contains("mlterm") || app_name.contains("aterm") || app_name.contains("xterm") {
+                            let category = if app_name.contains("code") || app_name.contains("cursor") || title.contains("omni-core") || app_name.contains("terminal") {
                                 "Deep Work"
-                            } else if app_name.contains("chrome") || app_name.contains("edge") || app_name.contains("firefox") || app_name.contains("safari") || app_name.contains("Opera GX Internet Browser") || app_name.contains("vivaldi") || app_name.contains("Zotero") || app_name.contains("ORCID") || app_name.contains("google") || app_name.contains("Research") || app_name.contains("brave") {
-                                if title.contains("youtube") || title.contains("twitter") || title.contains("reddit") || title.contains("facebook") || title.contains("instagram") || title.contains("tiktok") || title.contains("netflix") || title.contains("hulu") || title.contains("disney") || title.contains("prime video") || title.contains("hbo") || title.contains("twitch") {
+                            } else if app_name.contains("chrome") || app_name.contains("edge") || app_name.contains("brave") || app_name.contains("opera") || app_name.contains("firefox") || app_name.contains("vivaldi") || app_name.contains("safari") || app_name.contains("chromium") {
+                                if title.contains("youtube") || title.contains("twitter") || title.contains("reddit") {
                                     "Distraction"
                                 } else {
-                                    "Research" 
-                            } else if app_name.contains("discord") || app_name.contains("spotify") || app_name.contains("steam") || app_name.contains("apple music") || app_name.contains("youtube music") || app_name.contains("audible") || app_name.contains("scribd") || app_name.contains("goodreads") || app_name.contains("medium") || app_name.contains("substack") || app_name.contains("patreon") || app_name.contains("ko-fi") || app_name.contains("buymeacoffee") {
+                                    "Research"
+                                }
+                            } else if app_name.contains("discord") || app_name.contains("spotify") {
                                 "Leisure"
                             } else {
                                 "Neutral"
                             };
 
-                            // Create a unique row identifier for the telemetry record and insert the active window snapshot.
                             let id = format!("log_{}", now);
                             let _ = conn.execute(
                                 "INSERT INTO immutable_telemetry (id, timestamp, app_name, window_title, category) VALUES (?1, ?2, ?3, ?4, ?5)",
@@ -2759,8 +2749,7 @@ fn main() {
                             );
                         }
                         
-                        // Polling rate for telemetry (every 10 seconds).
-                        // This interval is intentionally coarse because the system is designed as a lightweight observer rather than a high-frequency profiler.
+                        // Polling rate for telemetry (every 10 seconds)
                         tokio::time::sleep(Duration::from_secs(10)).await;
                     }
                 }
@@ -2787,10 +2776,8 @@ fn main() {
             _ => {}
         })
         // Register all backend commands that the frontend can invoke over Tauri.
-        // This is the central public API surface of the app. Each entry here makes a Rust function available to the frontend
-        // over the Tauri bridge so the UI can request data, save state, start TTS, or trigger assistant actions.
         .invoke_handler(tauri::generate_handler![
-            get_telemetry_stats, // <--- NEW: TEMPORAL AGGREGATION ENGINE
+            get_telemetry_stats,
             get_telemetry, 
             get_active_app_telemetry, 
             ask_ollama, 
