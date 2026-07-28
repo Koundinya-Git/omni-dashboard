@@ -222,6 +222,20 @@ fn init_db() -> SqlResult<Connection> {
         [],
     )?;
 
+// For the Goals Trajectory Tabling in the Database
+
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS goals (
+            id TEXT PRIMARY KEY,
+            title TEXT NOT NULL,
+            description TEXT NOT NULL,
+            deadline INTEGER NOT NULL,
+            status TEXT NOT NULL DEFAULT 'active',
+            ai_assessment TEXT NOT NULL DEFAULT ''
+        )"
+        [],
+    )?;
+
     let defaults = [
         ("user_name", "Commander"),
         (
@@ -423,6 +437,16 @@ pub struct CalendarEventItem {
     pub is_all_day: bool,
 }
 
+// Represents a long-term user goal with AI-driven trajectory scoring
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+pub struct GoalItem{
+    pub id: String,
+    pub title: String,
+    pub description: String,
+    pub deadline: i64,
+    pub status: String,
+    pub ai_assessment: String,
+}
 // ==========================================
 // 2. CONTEXT HYDRATION ENGINE
 // ==========================================
@@ -979,6 +1003,62 @@ fn clear_chats_by_session(db: State<'_, DbState>, session_id: String) -> Result<
         params![session_id],
     )
     .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+//GOALS-COMMAND
+//Fetches all goals ordered by the closest deadline.
+ #[tauri::command]
+ fn get_goals(db: State<'_, DbState>) -> Result<Vec<GoalItem>, String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    let mut stmt = conn
+        .prepare("SELECT id, title, description, deadline, status, ai_assessment FROM goals ORDER BY deadline ASC")
+        .map_err(|e| e.to_string())?;
+
+    let iter = stmt
+        .query_map([], |row| {
+            Ok(GoalItem {
+                id: row.get(0)?,
+                title: row.get(1)?,
+                description: row.get(2)?,
+                deadline: row.get(3)?,
+                status: row.get(4)?,
+                ai_assessment: row.get(5)?,
+            })
+        })
+        .map_err(|e| e.to_string())?;
+
+    let mut list = Vec::new();
+    for item in iter.flatten() {
+        list.push(item);
+    }
+    Ok(list)
+ }
+
+ // Creates a new goal entry in the database.
+ #[tauri::command]
+fn add_goal(
+    db: State<'_, DbState>,
+    id: String,
+    title: String,
+    description: String,
+    deadline: i64,
+) -> Result<(), String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    conn.execute(
+        "INSERT INTO goals (id, title, description, deadline, status, ai_assessment) VALUES (?1, ?2, ?3, ?4, 'Active', '')",
+        params![id, title, description, deadline],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+//Remove a Goal from the database by its identifier.
+#[tauri::command]   
+fn delete_goal(db: State<'_, DbState>, id: String) -> Result<(), String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    conn.execute("DELETE FROM goals WHERE id = ?1", params![id])
+        .map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -2838,7 +2918,11 @@ fn main() {
             add_calendar_event, 
             update_calendar_event, 
             delete_calendar_event, 
-            get_calendar_events_in_range 
+            get_calendar_events_in_range,
+            get_goals,
+            add_goal,
+            update_goal_assessment,
+            delete_goal
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
