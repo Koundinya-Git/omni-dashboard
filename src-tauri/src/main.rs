@@ -232,7 +232,7 @@ fn init_db() -> SqlResult<Connection> {
             deadline INTEGER NOT NULL,
             status TEXT NOT NULL DEFAULT 'active',
             ai_assessment TEXT NOT NULL DEFAULT ''
-        )"
+        )",
         [],
     )?;
 
