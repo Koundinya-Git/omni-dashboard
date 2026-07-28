@@ -1053,6 +1053,23 @@ fn add_goal(
     Ok(())
 }
 
+// Updates the status of a goal and caches the AI assessment for progress tracking.
+#[tauri::command]
+fn update_goal_assessment(
+    db: State<'_, DbState>,
+    id: String,
+    status: String,
+    ai_assessment: String,
+) -> Result<(), String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    conn.execute(
+        "UPDATE goals SET status = ?1, ai_assessment = ?2 WHERE id = ?3",
+        params![status, ai_assessment, id],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 //Remove a Goal from the database by its identifier.
 #[tauri::command]   
 fn delete_goal(db: State<'_, DbState>, id: String) -> Result<(), String> {
