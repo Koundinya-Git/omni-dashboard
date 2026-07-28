@@ -236,6 +236,30 @@ fn init_db() -> SqlResult<Connection> {
         [],
     )?;
 
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS flashcards_decks (
+            id TEXT PRIMARY KEY,
+            title TEXT NOT NULL,
+            category TEXT NOT NULL,
+            subcategory TEXT NOT NULL,
+            created_at INTEGER NOT NULL
+            )",
+            [],
+    )?;
+
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS flashcards (
+            id TEXT PRIMARY KEY,
+            deck_id TEXT NOT NULL,
+            front TEXT NOT NULL,
+            back TEXT NOT NULL,
+            is_starred INTEGER NOT NULL DEFAULT 0,
+            next_review INTEGER NOT NULL DEFAULT 0,
+            FOREIGN KEY(deck_id) REFERENCES flashcards_decks(id) ON DELETE CASCADE
+        )",
+        [],
+    );
+
     let defaults = [
         ("user_name", "Commander"),
         (
@@ -447,6 +471,26 @@ pub struct GoalItem{
     pub status: String,
     pub ai_assessment: String,
 }
+
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+pub struct FlashcardDeck {
+    pub id: String,
+    pub title: String,
+    pub category: String, // 'Textbook', 'Note', 'LiveContext', 'Custom'
+    pub subcategory: String, // Course ID or Date String
+    pub created_at: i64,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+pub struct Flashcard {
+    pub id: String,
+    pub deck_id: String,
+    pub front: String,
+    pub back: String,
+    pub is_starred: bool,
+    pub next_review: i64,
+}
+
 // ==========================================
 // 2. CONTEXT HYDRATION ENGINE
 // ==========================================
@@ -1075,6 +1119,124 @@ fn update_goal_assessment(
 fn delete_goal(db: State<'_, DbState>, id: String) -> Result<(), String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
     conn.execute("DELETE FROM goals WHERE id = ?1", params![id])
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+// -----------------------------------------------------------------------------
+// --- FLASHCARD COMMANDS ---
+// -----------------------------------------------------------------------------
+
+#[tauri::command]
+fn get_flashcard_decks(db: State<'_, DbState>) -> Result<Vec<FlashcardDeck>, String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    let mut stmt = conn.prepare("SELECT id, title, category, subcategory, created_at FROM flashcard_decks ORDER BY created_at DESC").map_err(|e| e.to_string())?;
+    let iter = stmt.query_map([], |row| {
+        Ok(FlashcardDeck {
+            id: row.get(0)?,
+            title: row.get(1)?,
+            category: row.get(2)?,
+            subcategory: row.get(3)?,
+            created_at: row.get(4)?,
+        })
+    }).map_err(|e| e.to_string())?;
+
+    let mut list = Vec::new();
+    for item in iter.flatten() {
+        list.push(item);
+    }
+    Ok(list)
+}
+
+#[tauri::command]
+fn create_flashcard_deck(
+    db: State<'_, DbState>,
+    id: String,
+    title: String,
+    category: String,
+    subcategory: String,
+    created_at: i64,
+) -> Result<(), String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    conn.execute(
+        "INSERT INTO flashcard_decks (id, title, category, subcategory, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+        params![id, title, category, subcategory, created_at],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn rename_flashcard_deck(db: State<'_, DbState>, id: String, title: String) -> Result<(), String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    conn.execute(
+        "UPDATE flashcard_decks SET title = ?1 WHERE id = ?2",
+        params![title, id],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn delete_flashcard_deck(db: State<'_, DbState>, id: String) -> Result<(), String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    conn.execute("DELETE FROM flashcard_decks WHERE id = ?1", params![id])
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn get_flashcards(db: State<'_, DbState>, deck_id: String) -> Result<Vec<Flashcard>, String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    let mut stmt = conn.prepare("SELECT id, deck_id, front, back, created_at FROM flashcards WHERE deck_id = ?1").map_err(|e| e.to_string())?;
+    let iter = stmt.query_map(params![deck_id], |row| {
+        let is_starred_int: i32 = row.get(4)?;
+        Ok(Flashcard {
+            id: row.get(0)?,
+            deck_id: row.get(1)?,
+            front: row.get(2)?,
+            back: row.get(3)?,
+            is_starred: is_starred_int == 1, next_review: row.get(5)?,
+        })
+    }).map_err(|e| e.to_string())?;
+
+    let mut list = Vec::new();
+    for item in iter.flatten() {
+        list.push(item);
+    }
+    Ok(list)
+}
+
+#[tauri::command]
+fn add_flashcards(db: State<'_, DbState>, deck_id: String, cards: Vec<Flashcard>) -> Result<(), String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    for card in cards {
+        let starred_int = if card.is_starred { 1 } else { 0 };
+        conn.execute(
+            "INSERT INTO flashcards (id, deck_id, front, back, is_starred, next_review) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![card.id, deck_id, card.front, card.back, starred_int, card.next_review],
+        )
+        .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn toggle_flashcard_star(db: State<'_, DbState>, id: String, is_starred: bool) -> Result<(), String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    let starred_int = if is_starred { 1 } else { 0 };
+    conn.execute(
+        "UPDATE flashcards SET is_starred = ?1 WHERE id = ?2",
+        params![starred_int, id],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn delete_flashcard(db: State<'_, DbState>, id: String) -> Result<(), String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    conn.execute("DELETE FROM flashcards WHERE id = ?1", params![id])
         .map_err(|e| e.to_string())?;
     Ok(())
 }
@@ -2939,7 +3101,15 @@ fn main() {
             get_goals,
             add_goal,
             update_goal_assessment,
-            delete_goal
+            delete_goal,
+            get_flashcard_decks,
+            create_flashcard_deck,
+            rename_flashcard_deck,
+            delete_flashcard_deck,
+            get_flashcards,
+            add_flashcards,
+            toggle_flashcard_star,
+            delete_flashcard,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
