@@ -18,7 +18,7 @@ import {
   Volume2, VolumeX, Send, Music, Play, Pause, Square, ChevronRight, Repeat,
   Shuffle, SkipForward, SkipBack, ListMusic, HardDrive, FileAudio, CloudOff, Download,
   AlertTriangle, Library, FileUp, Clock, Users, Palmtree, AlertCircle, ChevronLeft, MapPin, AlignLeft,
-  BarChart3, Brain, Info
+  BarChart3, Brain, Info, Star
 } from 'lucide-react';
 
 // --- TYPESCRIPT INTERFACES ---
@@ -51,6 +51,12 @@ interface CustomDialogState {
 }
 interface GoalItem {
   id: string; title: string; description: string; deadline: number; status: string; ai_assessment: string;
+}
+interface FlashcardDeck {
+  id: string; title: string; category: string; subcategory: string; created_at: number;
+}
+interface Flashcard {
+  id: string; deck_id: string; front: string; back: string; is_starred: boolean; next_review: number;
 }
 
 // --- NEW TELEMETRY INTERFACES ---
@@ -179,20 +185,37 @@ export default function App() {
   const [goalForm, setGoalForm] = useState({title: '', description: '', deadline: new Date().getTime() + 86400000 * 7 });
   const [isAnalyzingGoal, setIsAnalyzingGoal] = useState<string | null>(null); 
 
+  const [flashcardDecks, setFlashcardDecks] = useState<FlashcardDeck[]>([]);
+  const [activeDeck, setActiveDeck] = useState<FlashcardDeck | null>(null);
+  const [activeFlashcards, setActiveFlashcards] = useState<Flashcard[]>([]);
+  const [isGeneratingFlashcards, setIsGeneratingFlashcards] = useState(false);
+  const [flashcardStudyMode, setFlashcardStudyMode] = useState(false);
+  const [studyIndex, setStudyIndex] = useState(0);
+  const [isCardFlipped, setIsCardFlipped] = useState(false);
+  const [customDeckPrompt, setCustomDeckPrompt] = useState("");
+
   useEffect(() => {
     fetchTasks(); fetchNotes(); fetchCourses(); loadWorkspacesAndSessions();
     loadSettings(); loadFocusSessions(); loadPlaylists(); loadOfflineSongs(); 
-    loadTextbooks(); loadBookSets(); loadCalendarEvents(); fetchGoals();
+    loadTextbooks(); loadBookSets(); loadCalendarEvents(); fetchGoals(); fetchFlashcardDecks();
     initSpeechRecognition();
   }, []);
 
   useEffect(() => {
     if (activeSessionId) {
-      fetchChatsBySession(activeSessionId); invoke('stop_reading').catch(console.error); setReadingMessageIdx(null);
-    } else { setChatHistory([]); }
+      fetchChatsBySession(activeSessionId); 
+      invoke('stop_reading').catch(console.error); 
+      setReadingMessageIdx(null);
+    } else { 
+      setChatHistory([]); 
+    }
   }, [activeSessionId]);
 
   useEffect(() => { loadCalendarEvents(); }, [selectedDate]);
+
+  useEffect(() => {
+    if (activeDeck) fetchFlashcards(activeDeck.id);
+  }, [activeDeck]);
 
   useEffect(() => {
     let intervalId: number;
@@ -205,7 +228,7 @@ export default function App() {
 
   useEffect(() => {
     let intervalId: number | undefined;
-    if (activeTab === 'stats' || activeTab === 'dashboard' || activeTab === 'goals') {
+    if (activeTab === 'stats' || activeTab === 'dashboard' || activeTab === 'goals' || activeTab === 'flashcards') {
       const fetchStats = async () => { try { setTelemetryStats(await invoke<TelemetryStats>('get_telemetry_stats')); } catch (e) { console.error(e); } };
       fetchStats(); intervalId = window.setInterval(fetchStats, 10000);
     }
@@ -265,9 +288,11 @@ export default function App() {
   const loadSettings = async () => { try { setSettings(await invoke<UserSettings>('get_settings')); } catch (e) { console.error(e); } };
   const handleSaveSettings = async (updatedSettings?: UserSettings) => { try { await invoke('save_settings', { settings: updatedSettings || settings }); if (!updatedSettings) setIsSettingsOpen(false); } catch (e) { console.error(e); } };
   const handleFocusSettingChange = (field: 'default_focus_time' | 'default_break_time', value: string) => { const newSettings = { ...settings, [field]: value }; setSettings(newSettings); handleSaveSettings(newSettings); };
+  
   const loadFocusSessions = async () => { try { setPastFocusSessions(await invoke<FocusSession[]>('get_focus_sessions')); } catch (e) { console.error(e); } };
   const handleStartFocus = () => { const focusMins = parseInt(settings.default_focus_time) || 25; setFocusDurationMinutes(focusMins); setFocusTimeLeft(focusMins * 60); setIsFocusing(true); };
   const handleStopFocus = () => { setIsFocusing(false); const focusMins = parseInt(settings.default_focus_time) || 25; setFocusTimeLeft(focusMins * 60); };
+  
   const handleFocusComplete = async () => {
     setIsFocusing(false);
     const permissionGranted = await isPermissionGranted();
@@ -281,6 +306,7 @@ export default function App() {
       setFocusTimeLeft((parseInt(settings.default_break_time) || 5) * 60);
     } catch (e) { console.error(e); }
   };
+
   const handleRenameFocusSession = async (id: string, currentTitle: string) => {
     const newTitle = await showPrompt("Rename Focus Session", currentTitle);
     if (newTitle === null || !newTitle.trim() || newTitle === currentTitle) return;
@@ -297,11 +323,15 @@ export default function App() {
   const handleAddSongToPlaylist = async (playlistId: string, song: YTMusicSong) => { try { await invoke('add_song_to_playlist', { playlistId, song }); await loadPlaylists(); } catch (e) { console.error(e); } };
   const handleRemoveSongFromPlaylist = async (playlistId: string, videoId: string) => { try { await invoke('remove_song_from_playlist', { playlistId, videoId }); await loadPlaylists(); } catch (e) { console.error(e); } };
   const handleSearchMusic = async () => { if (!musicQuery.trim()) return; setIsSearchingMusic(true); setMusicView('search'); try { setMusicResults(JSON.parse(await invoke<string>('search_yt_music', { query: musicQuery }))); } catch (e) { console.error(e); } setIsSearchingMusic(false); };
+  
   const handleDownloadYTSong = async (song: YTMusicSong) => {
     setIsDownloading(prev => ({...prev, [song.videoId]: true}));
-    try { await invoke('download_yt_song', { videoId: song.videoId, title: song.title, artist: song.artists[0]?.name || "Unknown", duration: song.duration, thumbnailUrl: song.thumbnails[0]?.url || "" }); await loadOfflineSongs(); } 
-    catch (e) { alert("Download failed"); } finally { setIsDownloading(prev => ({...prev, [song.videoId]: false})); }
+    try { 
+      await invoke('download_yt_song', { videoId: song.videoId, title: song.title, artist: song.artists[0]?.name || "Unknown", duration: song.duration, thumbnailUrl: song.thumbnails[0]?.url || "" }); 
+      await loadOfflineSongs(); 
+    } catch (e) { alert("Download failed"); } finally { setIsDownloading(prev => ({...prev, [song.videoId]: false})); }
   };
+
   const handleImportLocal = async () => {
     try {
       const selected = await open({ multiple: true, filters: [{ name: 'Audio', extensions: ['mp3', 'wav', 'm4a', 'ogg'] }] });
@@ -310,7 +340,9 @@ export default function App() {
       await loadOfflineSongs(); setMusicView('offline'); 
     } catch (e) { console.error(e); }
   };
+  
   const handleDeleteOffline = async (id: string, removeFile: boolean) => { if (await showConfirm("Delete Local File?")) { try { await invoke('delete_offline_song', { id, removeFile }); await loadOfflineSongs(); } catch (e) { console.error(e); } } };
+  
   const playSongDirectly = async (song: YTMusicSong, queue: YTMusicSong[] = [], index: number = 0) => {
     setCurrentSong(song); setIsMusicPlaying(true);
     if (queue.length > 0) { setPlaybackQueue(queue); setQueueIndex(index); } else { setPlaybackQueue([song]); setQueueIndex(0); }
@@ -320,6 +352,7 @@ export default function App() {
       if (audioRef.current) { audioRef.current.src = audioUrl; audioRef.current.play(); }
     } catch (e) { console.error(e); handleNextSong(); }
   };
+
   const playPlaylist = (playlist: Playlist) => { if (playlist.songs.length > 0) playSongDirectly(playlist.songs[0], playlist.songs, 0); };
   const handleNextSong = () => {
     if (playbackQueue.length === 0) { setIsMusicPlaying(false); return; }
@@ -330,8 +363,10 @@ export default function App() {
   const handlePrevSong = () => {
     if (playbackQueue.length === 0) return;
     if (audioCurrentTime > 3 && audioRef.current) { audioRef.current.currentTime = 0; return; }
-    const prevIdx = queueIndex > 0 ? queueIndex - 1 : 0; playSongDirectly(playbackQueue[prevIdx], playbackQueue, prevIdx);
+    const prevIdx = queueIndex > 0 ? queueIndex - 1 : 0; 
+    playSongDirectly(playbackQueue[prevIdx], playbackQueue, prevIdx);
   };
+
   const handleAudioEnd = () => { if (isLooping && audioRef.current) { audioRef.current.currentTime = 0; audioRef.current.play(); } else handleNextSong(); };
   const toggleMusicPlayPause = () => { if (audioRef.current) { if (isMusicPlaying) { audioRef.current.pause(); setIsMusicPlaying(false); } else { audioRef.current.play(); setIsMusicPlaying(true); } } };
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => { const newTime = parseFloat(e.target.value); setAudioCurrentTime(newTime); if (audioRef.current) audioRef.current.currentTime = newTime; };
@@ -442,9 +477,7 @@ export default function App() {
     try { await invoke('delete_calendar_event', { id }); setIsEventModalOpen(false); await loadCalendarEvents(); } catch (e) { console.error(e); }
   };
 
-  // --- GOALS & PREDICTIVE TRAJECTORY HANDLERS ---
   const fetchGoals = async () => { try { setGoals(await invoke<GoalItem[]>('get_goals')); } catch (e) { console.error(e); } };
-  
   const handleSaveGoal = async () => {
     if (!goalForm.title.trim()) return alert("Goal title required.");
     try {
@@ -463,60 +496,134 @@ export default function App() {
     try {
         const statsStr = telemetryStats ? `TODAY'S TELEMETRY: Deep Work: ${formatTimeDuration(telemetryStats.today['Deep Work']||0)}, Distraction: ${formatTimeDuration(telemetryStats.today['Distraction']||0)}.` : "No telemetry available today.";
         const pendingTasksCount = tasks.filter(t => !t.completed).length;
-        
-        const systemPrompt = `You are Omni-Core, a ruthless, analytical AI executive coach. 
-        Analyze the user's trajectory for the following goal based strictly on their recent telemetry data.
-        GOAL: ${goal.title}
-        DESCRIPTION: ${goal.description}
-        DEADLINE: ${new Date(goal.deadline).toLocaleDateString()}
-        USER'S RECENT STATS: ${statsStr} Active Pending Tasks: ${pendingTasksCount}.
-        
-        Provide a brutal, honest 3-4 sentence assessment. Will they achieve it at this rate? What must change? 
-        End your response with a strict status tag on a new line: either [STATUS: ON TRACK], [STATUS: AT RISK], or [STATUS: FAILING].`;
-
-        const response = await invoke<string>('ask_ollama', { 
-            messages: [{ role: 'user', content: systemPrompt }], 
-            persona: "Victor", 
-            modelTier: selectedTier, searchWeb: false, attachedTextbook: null,
-            currentDateStr: new Date().toLocaleString(), currentEpochMs: Date.now(), startOfTodayMs: 0
-        });
-
+        const systemPrompt = `You are Omni-Core, a ruthless, analytical AI executive coach. Analyze the user's trajectory for the following goal based strictly on their recent telemetry data. GOAL: ${goal.title} DESCRIPTION: ${goal.description} DEADLINE: ${new Date(goal.deadline).toLocaleDateString()} USER'S RECENT STATS: ${statsStr} Active Pending Tasks: ${pendingTasksCount}. Provide a brutal, honest 3-4 sentence assessment. Will they achieve it at this rate? What must change? End your response with a strict status tag on a new line: either [STATUS: ON TRACK], [STATUS: AT RISK], or [STATUS: FAILING].`;
+        const response = await invoke<string>('ask_ollama', { messages: [{ role: 'user', content: systemPrompt }], persona: "Victor", modelTier: selectedTier, searchWeb: false, attachedTextbook: null, currentDateStr: new Date().toLocaleString(), currentEpochMs: Date.now(), startOfTodayMs: 0 });
         let newStatus = "Analyzed";
         if (response.includes("[STATUS: ON TRACK]")) newStatus = "On Track";
         else if (response.includes("[STATUS: AT RISK]")) newStatus = "At Risk";
         else if (response.includes("[STATUS: FAILING]")) newStatus = "Failing";
-
         const cleanAssessment = response.replace(/\[STATUS:.*?\]/g, '').trim();
         await invoke('update_goal_assessment', { id: goal.id, status: newStatus, aiAssessment: cleanAssessment });
         await fetchGoals();
     } catch (e) { console.error("Goal Analysis Error:", e); } finally { setIsAnalyzingGoal(null); }
   };
 
-  const getEventTypeIcon = (type: string, className: string = "w-4 h-4") => {
-    switch(type) {
-        case 'TimeBlock': return <Layers className={className} />;
-        case 'Meeting': return <Users className={className} />;
-        case 'Holiday': return <Palmtree className={className} />;
-        case 'Deadline': return <AlertCircle className={className} />;
-        default: return <MapPin className={className} />;
+  // --- AUTO FLASHCARD HANDLERS ---
+  const fetchFlashcardDecks = async () => { try { setFlashcardDecks(await invoke<FlashcardDeck[]>('get_flashcard_decks')); } catch (e) { console.error(e); } };
+  const fetchFlashcards = async (deckId: string) => { try { setActiveFlashcards(await invoke<Flashcard[]>('get_flashcards', { deckId })); } catch (e) { console.error(e); } };
+
+  const handleGenerateFlashcards = async (sourceType: 'Textbook' | 'Note' | 'LiveContext' | 'Custom', sourceId: string, customPrompt: string) => {
+    setIsGeneratingFlashcards(true);
+    setActiveTab('flashcards');
+    try {
+      // 1. Much more aggressive prompt to force strict JSON compliance
+      let finalPrompt = `SYSTEM DIRECTIVE: You are a raw data extraction pipeline. You must return ONLY a valid JSON array. DO NOT include conversational text, introductions, or explanations. DO NOT wrap the array in a JSON object. \n\nEXPECTED FORMAT EXACTLY:\n[\n  {\n    "front": "Concept or Question",\n    "back": "Detailed Definition or Answer"\n  }\n]\n\n`;
+      
+      let attachedTextbook = null; 
+      let deckTitle = "New Auto-Deck";
+      
+      if (sourceType === 'Note') {
+        const note = notes.find(n => n.id === sourceId);
+        deckTitle = note?.title ? `Notes: ${note.title}` : 'Note Flashcards';
+        finalPrompt += `DATA SOURCE (CLASS NOTES):\n${note?.content || 'No content provided.'}`;
+      } else if (sourceType === 'Textbook') {
+        const tb = textbooks.find(t => t.id === sourceId);
+        deckTitle = tb?.title ? `Book: ${tb.title}` : 'Textbook Flashcards';
+        attachedTextbook = { textbook_id: sourceId, page_start: null, page_end: null, exact_snippet: null };
+        finalPrompt += `DATA SOURCE: Attached Textbook. Extract 10 of the most critical concepts into flashcards.`;
+      } else if (sourceType === 'LiveContext') {
+        deckTitle = `Telemetry: ${new Date().toLocaleDateString()}`;
+        finalPrompt += `DATA SOURCE (USER TELEMETRY LOGS TODAY):\nTop Apps: ${JSON.stringify(telemetryStats?.top_apps || [])}\nCreate exactly 5 flashcards summarizing what the user was studying/researching today based on the window titles.`;
+      } else if (sourceType === 'Custom') {
+        deckTitle = `Topic: ${customPrompt}`;
+        finalPrompt += `DATA SOURCE (CUSTOM TOPIC):\n${customPrompt}\nCreate exactly 5-10 flashcards covering the core concepts of this topic.`;
+      }
+
+      const response = await invoke<string>('ask_ollama', { 
+        messages: [{ role: 'user', content: finalPrompt }], 
+        persona: "Morgan", // Using Morgan as she is strict
+        modelTier: selectedTier, 
+        searchWeb: searchWebEnabled || sourceType === 'Custom', 
+        attachedTextbook: attachedTextbook, 
+        currentDateStr: new Date().toLocaleString(), 
+        currentEpochMs: Date.now(), 
+        startOfTodayMs: new Date().setHours(0,0,0,0) 
+      });
+      
+      console.log("Raw LLM Flashcard Response:", response);
+      
+      // 2. More robust JSON extraction
+      let jsonStr = ""; 
+      const startArr = response.indexOf('['); 
+      const endArr = response.lastIndexOf(']');
+      
+      if (startArr !== -1 && endArr !== -1 && startArr < endArr) { 
+        jsonStr = response.substring(startArr, endArr + 1); 
+      } else { 
+        throw new Error(`Model refused to format as array. It responded:\n\n"${response.substring(0, 150)}..."`); 
+      }
+      
+      let cardsData;
+      try { 
+        cardsData = JSON.parse(jsonStr); 
+        if (!Array.isArray(cardsData)) throw new Error("Parsed JSON is not an array"); 
+      } catch (err) { 
+        throw new Error("Model generated broken JSON syntax."); 
+      }
+      
+      if (cardsData.length === 0) throw new Error("Model returned an empty array of flashcards.");
+
+      const deckId = Date.now().toString();
+      await invoke('create_flashcard_deck', { id: deckId, title: deckTitle, category: sourceType, subcategory: sourceId, createdAt: Date.now() });
+      
+      const newCards: Flashcard[] = cardsData.map((c: any, i: number) => ({ 
+        id: `${deckId}_card_${i}`, 
+        deck_id: deckId, 
+        front: c.front || c.q || c.question || c.concept || 'Unknown Concept', 
+        back: c.back || c.a || c.answer || c.definition || 'Unknown Definition', 
+        is_starred: false, 
+        next_review: 0 
+      }));
+      
+      await invoke('add_flashcards', { deckId, cards: newCards });
+      await fetchFlashcardDecks();
+      setActiveDeck({ id: deckId, title: deckTitle, category: sourceType, subcategory: sourceId, created_at: Date.now() });
+      
+    } catch (e: any) {
+      console.error(e); 
+      alert(`Flashcard generation failed.\n\nReason: ${e.message || e}\n\nTip: Try switching the Model Tier (e.g. to 'Coding' or 'Performance') so the AI generates cleaner JSON arrays.`);
+    } finally { 
+      setIsGeneratingFlashcards(false); 
+      setCustomDeckPrompt(""); 
     }
   };
 
+  const handleDeleteDeck = async (id: string) => { if (!await showConfirm("Delete Deck", "Are you sure you want to permanently delete this deck and all its flashcards?")) return; try { await invoke('delete_flashcard_deck', { id }); if (activeDeck?.id === id) setActiveDeck(null); await fetchFlashcardDecks(); } catch(e) { console.error(e); } };
+  const handleToggleFlashcardStar = async (card: Flashcard) => { try { await invoke('toggle_flashcard_star', { id: card.id, isStarred: !card.is_starred }); if (activeDeck) fetchFlashcards(activeDeck.id); } catch(e) { console.error(e); } };
+  const handleDeleteFlashcard = async (id: string) => { try { await invoke('delete_flashcard', { id }); if (activeDeck) fetchFlashcards(activeDeck.id); } catch(e) { console.error(e); } };
+
+  const getEventTypeIcon = (type: string, className: string = "w-4 h-4") => { switch(type) { case 'TimeBlock': return <Layers className={className} />; case 'Meeting': return <Users className={className} />; case 'Holiday': return <Palmtree className={className} />; case 'Deadline': return <AlertCircle className={className} />; default: return <MapPin className={className} />; } };
+
+  // --- CHAT EFFECTS & LOGIC ---
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [chatHistory, isTyping]);
   useEffect(() => { const flushMemory = async () => { try { await invoke('flush_vram', { modelTier: selectedTier }); } catch (e) { console.error(e); } }; flushMemory(); }, [selectedTier]);
 
   const handleSendMessage = async (customPrompt?: string) => {
     const textToSend = typeof customPrompt === 'string' ? customPrompt : chatInput;
     if (!textToSend.trim() || isTyping) return;
+
+    if (textToSend.toLowerCase().startsWith("/flashcard ")) {
+        const topic = textToSend.substring(11).trim();
+        handleGenerateFlashcards('Custom', 'custom', topic);
+        setChatInput(''); return;
+    }
     
     if (isListening) { recognitionRef.current?.stop(); setIsListening(false); }
-    
     let targetSessionId = activeSessionId;
     if (!targetSessionId) {
         targetSessionId = Date.now().toString();
         await invoke('create_chat_session', { id: targetSessionId, title: textToSend.substring(0, 30) + "...", workspaceId: '', timestamp: Date.now() });
-        await loadWorkspacesAndSessions();
-        setActiveSessionId(targetSessionId);
+        await loadWorkspacesAndSessions(); setActiveSessionId(targetSessionId);
     }
 
     const userMessage: ChatMessage = { role: 'user', content: textToSend };
@@ -543,10 +650,7 @@ export default function App() {
       await saveChatToDb('ai', response, targetSessionId);
       
       const session = chatSessions.find(s => s.id === targetSessionId);
-      if (session && session.title === "New Chat") {
-          await invoke('rename_chat_session', { id: targetSessionId, title: textToSend.length > 25 ? textToSend.substring(0, 25) + "..." : textToSend });
-          await loadWorkspacesAndSessions();
-      }
+      if (session && session.title === "New Chat") { await invoke('rename_chat_session', { id: targetSessionId, title: textToSend.length > 25 ? textToSend.substring(0, 25) + "..." : textToSend }); await loadWorkspacesAndSessions(); }
 
       if (response.includes("*System Action:*")) {
           if (response.includes("task")) fetchTasks();
@@ -1087,7 +1191,13 @@ export default function App() {
 
               <div className="flex-1 flex flex-col relative h-full bg-[#212121]">
                 {!activeSessionId ? (
-                  <div className="flex-1 flex flex-col items-center justify-center text-gray-500"><MessageSquare className="w-12 h-12 mb-4 opacity-50" /><p>Select a chat or start a new one.</p></div>
+                  <div className="flex-1 flex flex-col items-center justify-center text-gray-500">
+                    <MessageSquare className="w-12 h-12 mb-4 opacity-50" />
+                    <p>Select a chat or start a new one.</p>
+                    <p className="text-xs mt-2 text-gray-600 font-mono text-center">
+                       Tip: Type <span className="bg-[#171717] px-1 rounded border border-gray-700">/flashcard [topic]</span> to auto-generate a study deck!
+                    </p>
+                  </div>
                 ) : (
                   <>
                     <div className="flex justify-between items-center px-6 py-4 border-b border-gray-800/50 bg-[#1a1a1a]">
@@ -1534,6 +1644,17 @@ export default function App() {
                          <button onClick={handleDeleteNote} className="p-2 text-gray-500 hover:text-red-500 hover:bg-[#2f2f2f] rounded-lg transition-colors"><Trash2 className="w-5 h-5" /></button>
                          <button onClick={handleSaveNote} className="flex items-center gap-2 bg-[#2f2f2f] hover:bg-gray-700 px-4 py-2 rounded-lg text-sm text-gray-300 transition-colors">Save to DB</button>
                          <button onClick={handleAISummarizeNote} className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 px-4 py-2 rounded-lg text-sm text-white transition-colors shadow-lg shadow-emerald-900/20"><BrainCircuit className="w-4 h-4" /> AI Summarize</button>
+                         
+                         {/* AUTOGENERATE FLASHCARDS FROM NOTES BUTTON */}
+                         <button 
+                            onClick={() => handleGenerateFlashcards('Note', activeNote.id, '')} 
+                            disabled={isGeneratingFlashcards}
+                            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded-lg text-sm text-white transition-colors shadow-lg disabled:opacity-50"
+                         >
+                           {isGeneratingFlashcards ? <Activity className="w-4 h-4 animate-spin"/> : <BrainCircuit className="w-4 h-4" />}
+                           Auto-Deck
+                         </button>
+
                        </div>
                      </div>
                      <textarea value={activeNote.content} onChange={(e) => setActiveNote({ ...activeNote, content: e.target.value })} className="flex-1 bg-transparent p-8 text-gray-300 text-[15px] leading-relaxed outline-none resize-none custom-scrollbar" placeholder="Start typing your lecture notes here..." />
@@ -1603,6 +1724,17 @@ export default function App() {
                          <p className="text-xs text-gray-500 truncate font-mono">{activeTextbook.file_path}</p>
                        </div>
                        <div className="flex items-center gap-3">
+                         
+                         {/* TEXTBOOK AUTO FLASHCARDS BUTTON */}
+                         <button 
+                            onClick={() => handleGenerateFlashcards('Textbook', activeTextbook.id, '')} 
+                            disabled={isGeneratingFlashcards}
+                            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded-lg text-sm text-white transition-colors shadow-lg mr-2 disabled:opacity-50"
+                         >
+                           {isGeneratingFlashcards ? <Activity className="w-4 h-4 animate-spin"/> : <BrainCircuit className="w-4 h-4" />}
+                           Extract Deck
+                         </button>
+
                          <div className="flex items-center gap-2 text-sm text-gray-400 bg-[#2f2f2f] px-3 py-1.5 rounded-lg border border-gray-700">
                            <Tag className="w-3.5 h-3.5" />
                            <select value={activeTextbook.course_id || ""} onChange={(e) => invoke('update_textbook_course', { id: activeTextbook.id, courseId: e.target.value }).then(loadTextbooks)} className="bg-transparent outline-none text-gray-300 w-32 cursor-pointer">
@@ -1697,6 +1829,135 @@ export default function App() {
                    </div>
                  )}
                </div>
+             </div>
+          )}
+
+          {/* AUTO-FLASHCARDS MODULE */}
+          {activeTab === 'flashcards' && (
+             <div className="flex-1 flex w-full mx-auto h-full overflow-hidden">
+                
+                <div className="w-[320px] bg-[#171717] border-r border-gray-800 flex flex-col flex-shrink-0">
+                    <div className="p-4 border-b border-gray-800 flex justify-between items-center bg-[#1a1a1a]">
+                        <h2 className="font-semibold text-gray-200 flex items-center gap-2 cursor-pointer hover:text-blue-400 transition-colors" onClick={() => { setActiveDeck(null); setFlashcardStudyMode(false); }}>
+                            <BrainCircuit className="w-4 h-4 text-blue-500" /> Study Decks
+                        </h2>
+                    </div>
+
+                    <div className="p-4 border-b border-gray-800 bg-[#212121]">
+                       <div className="text-xs text-gray-400 font-medium mb-3 flex items-center gap-1.5"><Activity className="w-3.5 h-3.5"/> Auto-Generate from Context</div>
+                       <button onClick={() => handleGenerateFlashcards('LiveContext', 'telemetry_today', '')} disabled={isGeneratingFlashcards} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-medium py-2.5 rounded-lg text-xs transition-colors flex items-center justify-center gap-2 shadow-lg disabled:opacity-50">
+                          {isGeneratingFlashcards ? <Activity className="w-4 h-4 animate-spin"/> : <Layers className="w-4 h-4" />} Grab Today's Telemetry
+                       </button>
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-2">
+                       {flashcardDecks.length === 0 ? (
+                           <div className="text-center p-4 text-gray-500 text-sm italic">No study decks. Generate one from your notes or textbooks!</div>
+                       ) : (
+                           flashcardDecks.map(deck => (
+                               <div key={deck.id} onClick={() => { setActiveDeck(deck); setFlashcardStudyMode(false); }} className={`p-3 rounded-xl border cursor-pointer transition-colors ${activeDeck?.id === deck.id ? 'bg-[#2f2f2f] border-gray-500 shadow-sm' : 'bg-[#1a1a1a] border-gray-800 hover:bg-[#212121] hover:border-gray-700'}`}>
+                                   <div className="flex justify-between items-start mb-1">
+                                       <h3 className="font-semibold text-gray-200 text-sm truncate pr-2">{deck.title}</h3>
+                                   </div>
+                                   <div className="flex items-center gap-2 mt-2">
+                                       <span className="text-[9px] uppercase tracking-wider font-bold bg-black/40 px-1.5 py-0.5 rounded text-gray-400">{deck.category}</span>
+                                   </div>
+                               </div>
+                           ))
+                       )}
+                    </div>
+                </div>
+
+                <div className="flex-1 flex flex-col bg-[#212121] h-full relative">
+                   {!activeDeck ? (
+                      <div className="flex-1 flex flex-col items-center justify-center text-gray-500 p-8">
+                         <BrainCircuit className="w-16 h-16 mb-4 opacity-30" />
+                         <h2 className="text-2xl font-bold text-gray-300 mb-2">Neural Flashcard Engine</h2>
+                         <p className="text-sm text-center max-w-md leading-relaxed mb-8">
+                            Omni-Core can automatically extract concepts from your textbooks, summarize your class notes, or analyze what you were working on today to build you a spaced-repetition study deck.
+                         </p>
+
+                         <div className="w-full max-w-lg bg-[#171717] border border-gray-800 p-6 rounded-2xl shadow-lg">
+                            <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4">Generate Custom Topic Deck</h3>
+                            <div className="flex gap-3">
+                               <input type="text" value={customDeckPrompt} onChange={(e) => setCustomDeckPrompt(e.target.value)} placeholder="e.g. History of the Roman Empire, React Hooks..." className="flex-1 bg-[#212121] border border-gray-700 rounded-xl px-4 py-3 outline-none focus:border-blue-500 text-sm text-gray-200" />
+                               <button onClick={() => handleGenerateFlashcards('Custom', 'custom', customDeckPrompt)} disabled={isGeneratingFlashcards || !customDeckPrompt.trim()} className="bg-blue-600 hover:bg-blue-500 px-6 py-3 rounded-xl text-sm font-medium text-white transition-colors disabled:opacity-50 flex items-center gap-2">
+                                  {isGeneratingFlashcards ? <Activity className="w-4 h-4 animate-spin"/> : <BrainCircuit className="w-4 h-4"/>} Synthesize
+                               </button>
+                            </div>
+                         </div>
+                      </div>
+                   ) : flashcardStudyMode ? (
+                      <div className="flex-1 flex flex-col items-center justify-center p-8 bg-[#1a1a1a]">
+                         <div className="w-full max-w-3xl flex justify-between items-center mb-8">
+                            <button onClick={() => setFlashcardStudyMode(false)} className="px-4 py-2 bg-[#2f2f2f] hover:bg-gray-700 rounded-lg text-sm font-medium text-gray-300 transition-colors flex items-center gap-2"><ChevronLeft className="w-4 h-4"/> Exit Study Mode</button>
+                            <span className="text-sm font-mono text-gray-500 font-bold tracking-widest">{studyIndex + 1} / {activeFlashcards.length}</span>
+                         </div>
+                         
+                         <div className="w-full max-w-3xl aspect-[16/9] perspective-1000 mb-8" onClick={() => setIsCardFlipped(!isCardFlipped)}>
+                            <div className={`relative w-full h-full transition-transform duration-500 preserve-3d cursor-pointer ${isCardFlipped ? 'rotate-y-180' : ''}`}>
+                               {/* FRONT */}
+                               <div className="absolute w-full h-full backface-hidden bg-[#212121] border-2 border-blue-500/20 rounded-3xl p-12 flex flex-col items-center justify-center text-center shadow-2xl">
+                                  <h2 className="text-3xl font-bold text-gray-100 leading-snug">{activeFlashcards[studyIndex]?.front}</h2>
+                                  <p className="absolute bottom-6 text-xs font-bold text-gray-500 uppercase tracking-widest animate-pulse">Click to flip</p>
+                               </div>
+                               {/* BACK */}
+                               <div className="absolute w-full h-full backface-hidden rotate-y-180 bg-[#171717] border-2 border-emerald-500/30 rounded-3xl p-12 flex flex-col items-center justify-center text-center shadow-2xl overflow-y-auto custom-scrollbar">
+                                  <div className="markdown-body text-xl text-gray-200 leading-relaxed max-w-2xl"><ReactMarkdown remarkPlugins={[remarkGfm]}>{activeFlashcards[studyIndex]?.back || ''}</ReactMarkdown></div>
+                               </div>
+                            </div>
+                         </div>
+
+                         <div className="flex items-center gap-4">
+                            <button onClick={() => {setStudyIndex(Math.max(0, studyIndex - 1)); setIsCardFlipped(false);}} disabled={studyIndex === 0} className="w-14 h-14 rounded-full bg-[#2f2f2f] hover:bg-gray-700 flex items-center justify-center text-white disabled:opacity-30 transition-colors"><ChevronLeft className="w-6 h-6"/></button>
+                            <button onClick={() => {setStudyIndex(Math.min(activeFlashcards.length - 1, studyIndex + 1)); setIsCardFlipped(false);}} disabled={studyIndex === activeFlashcards.length - 1} className="w-14 h-14 rounded-full bg-[#2f2f2f] hover:bg-gray-700 flex items-center justify-center text-white disabled:opacity-30 transition-colors"><ChevronRight className="w-6 h-6"/></button>
+                         </div>
+                      </div>
+                   ) : (
+                      <div className="flex-1 flex flex-col h-full overflow-hidden">
+                         <div className="p-6 border-b border-gray-800 flex justify-between items-center bg-[#1a1a1a] shadow-sm z-10">
+                            <div>
+                                <h2 className="text-2xl font-bold text-white mb-1">{activeDeck.title}</h2>
+                                <p className="text-xs text-gray-500 font-mono">{activeFlashcards.length} Cards Extracted | Source: {activeDeck.category}</p>
+                            </div>
+                            <div className="flex items-center gap-3">
+                                <button onClick={() => handleDeleteDeck(activeDeck.id)} className="p-2.5 text-gray-400 hover:text-red-400 hover:bg-[#2f2f2f] rounded-lg transition-colors"><Trash2 className="w-5 h-5"/></button>
+                                <button onClick={() => { setStudyIndex(0); setIsCardFlipped(false); setFlashcardStudyMode(true); }} disabled={activeFlashcards.length === 0} className="bg-emerald-600 hover:bg-emerald-500 px-6 py-2.5 rounded-xl text-sm font-medium text-white transition-colors shadow-lg shadow-emerald-900/20 disabled:opacity-50 flex items-center gap-2">
+                                    <PlayCircle className="w-4 h-4"/> Start Deep Focus
+                                </button>
+                            </div>
+                         </div>
+                         
+                         <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                                {activeFlashcards.map((card, idx) => (
+                                    <div key={card.id} className="bg-[#171717] border border-gray-800 rounded-2xl p-5 flex flex-col relative group hover:border-gray-600 transition-colors min-h-[200px]">
+                                        <div className="flex justify-between items-start mb-3 border-b border-gray-800 pb-3">
+                                            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Card {idx + 1}</span>
+                                            <div className="flex items-center gap-1">
+                                                <button onClick={() => handleToggleFlashcardStar(card)} className={`p-1.5 rounded transition-colors ${card.is_starred ? 'text-yellow-400' : 'text-gray-600 hover:text-gray-400'}`}><Star className={`w-4 h-4 ${card.is_starred ? 'fill-current' : ''}`}/></button>
+                                                <button onClick={() => handleDeleteFlashcard(card.id)} className="opacity-0 group-hover:opacity-100 p-1.5 text-gray-600 hover:text-red-400 transition-opacity"><Trash2 className="w-4 h-4"/></button>
+                                            </div>
+                                        </div>
+                                        <div className="flex-1 flex flex-col justify-center">
+                                            <p className="text-sm font-bold text-gray-200 text-center mb-4 line-clamp-3">{card.front}</p>
+                                            <p className="text-xs text-gray-500 text-center line-clamp-4 bg-[#212121] p-3 rounded-xl border border-gray-800">{card.back}</p>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                         </div>
+                      </div>
+                   )}
+                </div>
+                
+                {/* Embedded custom CSS class for 3D flip effect without adding a whole CSS file */}
+                <style dangerouslySetInnerHTML={{__html: `
+                    .perspective-1000 { perspective: 1000px; }
+                    .preserve-3d { transform-style: preserve-3d; }
+                    .backface-hidden { backface-visibility: hidden; }
+                    .rotate-y-180 { transform: rotateY(180deg); }
+                `}} />
              </div>
           )}
 
@@ -2023,7 +2284,7 @@ export default function App() {
           )}
 
           {/* RESTORED WIP TABS */}
-          {['timetable', 'flashcards', 'summaries'].includes(activeTab) && (
+          {['timetable', 'summaries'].includes(activeTab) && (
             <div className="flex-1 flex flex-col items-center justify-center text-gray-500 p-8 text-center">
               <Activity className="w-12 h-12 mb-4 opacity-50" />
               <h2 className="text-2xl font-mono mb-2 uppercase tracking-widest text-gray-400">{activeTab} Module</h2>
@@ -2109,25 +2370,60 @@ export default function App() {
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center animate-in fade-in duration-200">
           <div className="bg-[#1a1a1a] border border-gray-700 rounded-2xl w-full max-w-md shadow-2xl flex flex-col overflow-hidden zoom-in-95">
             <div className="p-5 border-b border-gray-800 flex items-center justify-between bg-[#171717]">
-               <h2 className="text-lg font-semibold text-white flex items-center gap-2"><Target className="w-5 h-5 text-blue-500"/> Define Target</h2>
-               <button onClick={() => setIsGoalModalOpen(false)} className="text-gray-500 hover:text-white transition-colors"><X className="w-5 h-5"/></button>
+               <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+                 <Target className="w-5 h-5 text-blue-500"/> Define Target
+               </h2>
+               <button onClick={() => setIsGoalModalOpen(false)} className="text-gray-500 hover:text-white transition-colors">
+                 <X className="w-5 h-5"/>
+               </button>
             </div>
             
             <div className="p-6 flex flex-col gap-5">
-               <input type="text" autoFocus value={goalForm.title} onChange={e => setGoalForm({...goalForm, title: e.target.value})} placeholder="What is your objective?" className="w-full bg-transparent text-xl font-bold text-white border-b border-gray-700 pb-2 outline-none focus:border-blue-500" />
+               <input 
+                 type="text" 
+                 autoFocus 
+                 value={goalForm.title} 
+                 onChange={e => setGoalForm({...goalForm, title: e.target.value})} 
+                 placeholder="What is your objective?" 
+                 className="w-full bg-transparent text-xl font-bold text-white border-b border-gray-700 pb-2 outline-none focus:border-blue-500" 
+               />
                <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1.5"><AlignLeft className="w-3 h-3"/> Context & Metrics</label>
-                  <textarea value={goalForm.description} onChange={e => setGoalForm({...goalForm, description: e.target.value})} className="w-full bg-[#212121] border border-gray-700 rounded-xl px-3 py-2 outline-none focus:border-blue-500 text-sm text-gray-200 min-h-[80px] resize-none custom-scrollbar" placeholder="Describe the win condition..." />
+                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
+                    <AlignLeft className="w-3 h-3"/> Context & Metrics
+                  </label>
+                  <textarea 
+                    value={goalForm.description} 
+                    onChange={e => setGoalForm({...goalForm, description: e.target.value})} 
+                    className="w-full bg-[#212121] border border-gray-700 rounded-xl px-3 py-2 outline-none focus:border-blue-500 text-sm text-gray-200 min-h-[80px] resize-none custom-scrollbar" 
+                    placeholder="Describe the win condition..." 
+                  />
                </div>
                <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1.5"><Clock className="w-3 h-3"/> Deadline</label>
-                  <input type="datetime-local" value={new Date(goalForm.deadline - new Date().getTimezoneOffset() * 60000).toISOString().slice(0,16)} onChange={e => setGoalForm({...goalForm, deadline: new Date(e.target.value).getTime()})} className="w-full bg-[#212121] border border-gray-700 rounded-xl px-3 py-2 outline-none focus:border-blue-500 text-sm text-gray-200" />
+                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
+                    <Clock className="w-3 h-3"/> Deadline
+                  </label>
+                  <input 
+                    type="datetime-local" 
+                    value={new Date(goalForm.deadline - new Date().getTimezoneOffset() * 60000).toISOString().slice(0,16)} 
+                    onChange={e => setGoalForm({...goalForm, deadline: new Date(e.target.value).getTime()})} 
+                    className="w-full bg-[#212121] border border-gray-700 rounded-xl px-3 py-2 outline-none focus:border-blue-500 text-sm text-gray-200" 
+                  />
                </div>
             </div>
 
             <div className="p-4 border-t border-gray-800 bg-[#171717] flex justify-end gap-3">
-                 <button onClick={() => setIsGoalModalOpen(false)} className="px-5 py-2.5 rounded-xl text-sm font-medium text-gray-400 hover:text-white hover:bg-[#2f2f2f] transition-colors">Cancel</button>
-                 <button onClick={handleSaveGoal} className="px-5 py-2.5 rounded-xl text-sm font-medium text-white bg-blue-600 hover:bg-blue-500 shadow-lg shadow-blue-900/20 transition-colors">Commit Target</button>
+                 <button 
+                   onClick={() => setIsGoalModalOpen(false)} 
+                   className="px-5 py-2.5 rounded-xl text-sm font-medium text-gray-400 hover:text-white hover:bg-[#2f2f2f] transition-colors"
+                 >
+                   Cancel
+                 </button>
+                 <button 
+                   onClick={handleSaveGoal} 
+                   className="px-5 py-2.5 rounded-xl text-sm font-medium text-white bg-blue-600 hover:bg-blue-500 shadow-lg shadow-blue-900/20 transition-colors"
+                 >
+                   Commit Target
+                 </button>
             </div>
           </div>
         </div>
@@ -2146,13 +2442,32 @@ export default function App() {
             <div className="p-5">
               {dialog.message && <p className="text-sm text-gray-300 mb-4">{dialog.message}</p>}
               {dialog.type === 'prompt' && (
-                <input autoFocus type="text" value={dialog.value} onChange={(e) => setDialog({ ...dialog, value: e.target.value })} onKeyDown={(e) => { if (e.key === 'Enter') handleDialogConfirm(); if (e.key === 'Escape') handleDialogCancel(); }} placeholder={dialog.placeholder || "Enter value..."} className="w-full bg-[#212121] border border-gray-700 rounded-xl px-4 py-3 outline-none focus:border-emerald-500 text-sm text-gray-200" />
+                <input 
+                  autoFocus 
+                  type="text" 
+                  value={dialog.value} 
+                  onChange={(e) => setDialog({ ...dialog, value: e.target.value })} 
+                  onKeyDown={(e) => { 
+                    if (e.key === 'Enter') handleDialogConfirm(); 
+                    if (e.key === 'Escape') handleDialogCancel(); 
+                  }} 
+                  placeholder={dialog.placeholder || "Enter value..."} 
+                  className="w-full bg-[#212121] border border-gray-700 rounded-xl px-4 py-3 outline-none focus:border-emerald-500 text-sm text-gray-200" 
+                />
               )}
             </div>
             
             <div className="p-4 border-t border-gray-800 bg-[#171717] flex justify-end gap-3">
-              <button onClick={handleDialogCancel} className="px-4 py-2.5 rounded-xl text-sm font-medium text-gray-400 hover:text-white hover:bg-[#2f2f2f] transition-colors">Cancel</button>
-              <button onClick={handleDialogConfirm} className={`px-4 py-2.5 rounded-xl text-sm font-medium text-white transition-colors ${dialog.type === 'confirm' ? 'bg-red-600 hover:bg-red-500 shadow-lg shadow-red-900/20' : 'bg-emerald-600 hover:bg-emerald-500 shadow-lg shadow-emerald-900/20'}`}>
+              <button 
+                onClick={handleDialogCancel} 
+                className="px-4 py-2.5 rounded-xl text-sm font-medium text-gray-400 hover:text-white hover:bg-[#2f2f2f] transition-colors"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={handleDialogConfirm} 
+                className={`px-4 py-2.5 rounded-xl text-sm font-medium text-white transition-colors ${dialog.type === 'confirm' ? 'bg-red-600 hover:bg-red-500 shadow-lg shadow-red-900/20' : 'bg-emerald-600 hover:bg-emerald-500 shadow-lg shadow-emerald-900/20'}`}
+              >
                 {dialog.type === 'confirm' ? 'Proceed' : 'Save'}
               </button>
             </div>
@@ -2165,8 +2480,12 @@ export default function App() {
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center">
           <div className="bg-[#1a1a1a] border border-gray-700 rounded-2xl w-full max-w-xl shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
             <div className="flex items-center justify-between p-5 border-b border-gray-800">
-              <h2 className="text-lg font-semibold text-gray-200 flex items-center gap-2"><Settings className="w-5 h-5"/> Omni-Core Profile Settings</h2>
-              <button onClick={() => setIsSettingsOpen(false)} className="text-gray-500 hover:text-white transition-colors"><X className="w-5 h-5"/></button>
+              <h2 className="text-lg font-semibold text-gray-200 flex items-center gap-2">
+                <Settings className="w-5 h-5"/> Omni-Core Profile Settings
+              </h2>
+              <button onClick={() => setIsSettingsOpen(false)} className="text-gray-500 hover:text-white transition-colors">
+                <X className="w-5 h-5"/>
+              </button>
             </div>
             
             <div className="p-6 flex flex-col gap-6 overflow-y-auto custom-scrollbar max-h-[70vh]">
@@ -2174,35 +2493,75 @@ export default function App() {
                 <label className="text-sm font-medium text-gray-400">Preferred Name</label>
                 <div className="relative flex items-center">
                   <User className="absolute left-3 w-4 h-4 text-gray-500" />
-                  <input type="text" value={settings.user_name} onChange={e => setSettings({...settings, user_name: e.target.value})} className="w-full bg-[#212121] border border-gray-700 rounded-xl pl-9 pr-4 py-2.5 outline-none focus:border-emerald-500 text-sm text-gray-200" placeholder="e.g. Commander, Alice..." />
+                  <input 
+                    type="text" 
+                    value={settings.user_name} 
+                    onChange={e => setSettings({...settings, user_name: e.target.value})} 
+                    className="w-full bg-[#212121] border border-gray-700 rounded-xl pl-9 pr-4 py-2.5 outline-none focus:border-emerald-500 text-sm text-gray-200" 
+                    placeholder="e.g. Commander, Alice..." 
+                  />
                 </div>
               </div>
 
               <div className="flex flex-col gap-1.5">
                 <label className="text-sm font-medium text-gray-400">User Bio / Background</label>
-                <textarea value={settings.user_bio} onChange={e => setSettings({...settings, user_bio: e.target.value})} className="w-full bg-[#212121] border border-gray-700 rounded-xl px-4 py-3 outline-none focus:border-emerald-500 text-sm text-gray-200 min-h-[80px] resize-none" placeholder="Tell Omni-Core about yourself..." />
+                <textarea 
+                  value={settings.user_bio} 
+                  onChange={e => setSettings({...settings, user_bio: e.target.value})} 
+                  className="w-full bg-[#212121] border border-gray-700 rounded-xl px-4 py-3 outline-none focus:border-emerald-500 text-sm text-gray-200 min-h-[80px] resize-none" 
+                  placeholder="Tell Omni-Core about yourself..." 
+                />
               </div>
 
               <div className="flex flex-col gap-1.5">
                 <label className="text-sm font-medium text-gray-400">Custom System Directives</label>
-                <textarea value={settings.custom_instructions} onChange={e => setSettings({...settings, custom_instructions: e.target.value})} className="w-full bg-[#212121] border border-gray-700 rounded-xl px-4 py-3 outline-none focus:border-emerald-500 text-sm text-gray-200 min-h-[100px] resize-none" placeholder="e.g. Always format answers in markdown tables..." />
+                <textarea 
+                  value={settings.custom_instructions} 
+                  onChange={e => setSettings({...settings, custom_instructions: e.target.value})} 
+                  className="w-full bg-[#212121] border border-gray-700 rounded-xl px-4 py-3 outline-none focus:border-emerald-500 text-sm text-gray-200 min-h-[100px] resize-none" 
+                  placeholder="e.g. Always format answers in markdown tables..." 
+                />
               </div>
               
               <div className="flex flex-col gap-1.5">
                 <div className="flex justify-between items-center mb-1">
                   <label className="text-sm font-medium text-gray-400">Voice Synthesis Speed (WPM)</label>
-                  <span className="text-xs font-bold text-emerald-500 bg-emerald-500/10 px-2 py-1 rounded-md">{settings.tts_wpm} WPM</span>
+                  <span className="text-xs font-bold text-emerald-500 bg-emerald-500/10 px-2 py-1 rounded-md">
+                    {settings.tts_wpm} WPM
+                  </span>
                 </div>
-                <input type="range" min="50" max="600" step="10" value={settings.tts_wpm} onChange={e => setSettings({...settings, tts_wpm: e.target.value})} className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-emerald-500" />
-                <div className="flex justify-between text-[10px] text-gray-500 font-medium px-1 mt-1"><span>0.25x (50)</span><span>Normal (200)</span><span>3.0x (600)</span></div>
+                <input 
+                  type="range" 
+                  min="50" 
+                  max="600" 
+                  step="10" 
+                  value={settings.tts_wpm} 
+                  onChange={e => setSettings({...settings, tts_wpm: e.target.value})} 
+                  className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-emerald-500" 
+                />
+                <div className="flex justify-between text-[10px] text-gray-500 font-medium px-1 mt-1">
+                  <span>0.25x (50)</span>
+                  <span>Normal (200)</span>
+                  <span>3.0x (600)</span>
+                </div>
               </div>
             </div>
 
             <div className="p-4 border-t border-gray-800 bg-[#171717] flex justify-between items-center">
               <span className="text-[10px] text-gray-500 font-mono ml-2">© 2026 Koundinya Gajulapalli (GPL v3)</span>
               <div className="flex gap-3">
-                 <button onClick={() => setIsSettingsOpen(false)} className="px-5 py-2.5 rounded-xl text-sm font-medium text-gray-400 hover:text-white hover:bg-[#2f2f2f] transition-colors">Cancel</button>
-                 <button onClick={() => handleSaveSettings()} className="px-5 py-2.5 rounded-xl text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-500 shadow-lg shadow-emerald-900/20 transition-colors">Save Configurations</button>
+                 <button 
+                   onClick={() => setIsSettingsOpen(false)} 
+                   className="px-5 py-2.5 rounded-xl text-sm font-medium text-gray-400 hover:text-white hover:bg-[#2f2f2f] transition-colors"
+                 >
+                   Cancel
+                 </button>
+                 <button 
+                   onClick={() => handleSaveSettings()} 
+                   className="px-5 py-2.5 rounded-xl text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-500 shadow-lg shadow-emerald-900/20 transition-colors"
+                 >
+                   Save Configurations
+                 </button>
               </div>
             </div>
           </div>
@@ -2235,25 +2594,67 @@ export default function App() {
   );
 }
 
-function SidebarItem({ icon, label, active, onClick }: { icon: React.ReactElement, label: string, active: boolean, onClick: () => void }) {
+function SidebarItem({ 
+  icon, 
+  label, 
+  active, 
+  onClick 
+}: { 
+  icon: React.ReactElement, 
+  label: string, 
+  active: boolean, 
+  onClick: () => void 
+}) {
   return (
-    <button onClick={onClick} className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors text-sm ${active ? 'bg-[#2f2f2f] text-white font-medium' : 'text-gray-400 hover:bg-[#2f2f2f] hover:text-gray-200'}`}>
+    <button 
+      onClick={onClick} 
+      className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors text-sm ${
+        active ? 'bg-[#2f2f2f] text-white font-medium' : 'text-gray-400 hover:bg-[#2f2f2f] hover:text-gray-200'
+      }`}
+    >
       {React.cloneElement(icon, { className: "w-4 h-4 flex-shrink-0" })}
       <span>{label}</span>
     </button>
   );
 }
 
-function SessionItem({ session, isActive, onClick, onRename, onDelete }: { session: ChatSession, isActive: boolean, onClick: () => void, onRename: () => void, onDelete: () => void }) {
+function SessionItem({ 
+  session, 
+  isActive, 
+  onClick, 
+  onRename, 
+  onDelete 
+}: { 
+  session: ChatSession, 
+  isActive: boolean, 
+  onClick: () => void, 
+  onRename: () => void, 
+  onDelete: () => void 
+}) {
   return (
-    <div onClick={onClick} className={`flex items-center justify-between px-2 py-2 rounded-lg cursor-pointer group transition-colors ${isActive ? 'bg-[#2f2f2f] text-gray-200' : 'text-gray-400 hover:bg-[#212121] hover:text-gray-300'}`}>
+    <div 
+      onClick={onClick} 
+      className={`flex items-center justify-between px-2 py-2 rounded-lg cursor-pointer group transition-colors ${
+        isActive ? 'bg-[#2f2f2f] text-gray-200' : 'text-gray-400 hover:bg-[#212121] hover:text-gray-300'
+      }`}
+    >
       <div className="flex items-center gap-2 truncate pr-2">
         <MessageSquare className="w-3.5 h-3.5 flex-shrink-0" />
         <span className="text-[13px] truncate">{session.title}</span>
       </div>
       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-        <button onClick={(e) => { e.stopPropagation(); onRename(); }} className="p-1 hover:bg-gray-600 rounded text-gray-400 hover:text-white"><Edit className="w-3 h-3" /></button>
-        <button onClick={(e) => { e.stopPropagation(); onDelete(); }} className="p-1 hover:bg-red-500/20 rounded text-gray-400 hover:text-red-400"><Trash2 className="w-3 h-3" /></button>
+        <button 
+          onClick={(e) => { e.stopPropagation(); onRename(); }} 
+          className="p-1 hover:bg-gray-600 rounded text-gray-400 hover:text-white"
+        >
+          <Edit className="w-3 h-3" />
+        </button>
+        <button 
+          onClick={(e) => { e.stopPropagation(); onDelete(); }} 
+          className="p-1 hover:bg-red-500/20 rounded text-gray-400 hover:text-red-400"
+        >
+          <Trash2 className="w-3 h-3" />
+        </button>
       </div>
     </div>
   );

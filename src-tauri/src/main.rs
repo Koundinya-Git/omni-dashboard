@@ -237,14 +237,14 @@ fn init_db() -> SqlResult<Connection> {
     )?;
 
     conn.execute(
-        "CREATE TABLE IF NOT EXISTS flashcards_decks (
+        "CREATE TABLE IF NOT EXISTS flashcard_decks (
             id TEXT PRIMARY KEY,
             title TEXT NOT NULL,
             category TEXT NOT NULL,
             subcategory TEXT NOT NULL,
             created_at INTEGER NOT NULL
-            )",
-            [],
+        )",
+        [],
     )?;
 
     conn.execute(
@@ -255,10 +255,10 @@ fn init_db() -> SqlResult<Connection> {
             back TEXT NOT NULL,
             is_starred INTEGER NOT NULL DEFAULT 0,
             next_review INTEGER NOT NULL DEFAULT 0,
-            FOREIGN KEY(deck_id) REFERENCES flashcards_decks(id) ON DELETE CASCADE
+            FOREIGN KEY(deck_id) REFERENCES flashcard_decks(id) ON DELETE CASCADE
         )",
         [],
-    );
+    )?;
 
     let defaults = [
         ("user_name", "Commander"),
