@@ -1084,7 +1084,10 @@ fn del_deck(db: State<'_, DbState>, id: String) -> Result<(), String> {
 #[tauri::command]
 fn get_flashcards(db: State<'_, DbState>, deck_id: String) -> Result<Vec<Flashcard>, String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
-    let mut stmt = conn.prepare("SELECT id, deck_id, front, back, created_at FROM flashcards WHERE deck_id = ?1").map_err(|e| e.to_string())?;
+    
+    // Changed "created_at" to "is_starred, next_review" to match your DB schema perfectly
+    let mut stmt = conn.prepare("SELECT id, deck_id, front, back, is_starred, next_review FROM flashcards WHERE deck_id = ?1").map_err(|e| e.to_string())?;
+    
     let iter = stmt.query_map(params![deck_id], |row| {
         let is_starred_int: i32 = row.get(4)?;
         Ok(Flashcard {
@@ -1092,7 +1095,8 @@ fn get_flashcards(db: State<'_, DbState>, deck_id: String) -> Result<Vec<Flashca
             deck_id: row.get(1)?,
             front: row.get(2)?,
             back: row.get(3)?,
-            is_starred: is_starred_int == 1, next_review: row.get(5)?,
+            is_starred: is_starred_int == 1, 
+            next_review: row.get(5)?,
         })
     }).map_err(|e| e.to_string())?;
 
@@ -1104,13 +1108,24 @@ fn get_flashcards(db: State<'_, DbState>, deck_id: String) -> Result<Vec<Flashca
 }
 
 #[tauri::command]
-fn add_flashcards(db: State<'_, DbState>, deck_id: String, cards: Vec<Flashcard>) -> Result<(), String> {
+fn add_flashcards(db: State<'_, DbState>, deck_id: String, cards: Vec<serde_json::Value>) -> Result<(), String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
+    
     for card in cards {
-        let starred_int = if card.is_starred { 1 } else { 0 };
+        // AI models hallucinate keys. This safely catches "front", "question", or "q".
+        let front = card.get("front").or(card.get("question")).or(card.get("q"))
+            .and_then(|v| v.as_str()).unwrap_or("Empty Front").to_string();
+            
+        let back = card.get("back").or(card.get("answer")).or(card.get("a"))
+            .and_then(|v| v.as_str()).unwrap_or("Empty Back").to_string();
+
+        // Generate a hyper-specific ID so cards don't overwrite each other
+        let id = format!("card_{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_micros());
+        std::thread::sleep(std::time::Duration::from_micros(2)); 
+
         conn.execute(
-            "INSERT INTO flashcards (id, deck_id, front, back, is_starred, next_review) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            params![card.id, deck_id, card.front, card.back, starred_int, card.next_review],
+            "INSERT INTO flashcards (id, deck_id, front, back, is_starred, next_review) VALUES (?1, ?2, ?3, ?4, 0, 0)",
+            params![id, deck_id, front, back],
         )
         .map_err(|e| e.to_string())?;
     }
@@ -2552,6 +2567,11 @@ You may only use ONE tag per response.
         clean_text.push_str(current_text);        
                                                                                                                    
         let mut final_response = clean_text.replace("```json", "").replace("```", "").trim().to_string();
+        if final_response.contains("[") && final_response.contains("]") && (final_response.contains("\"front\"") || final_response.contains("\"question\"") || final_response.contains("\"q\"")) {
+            if let (Some(start), Some(end)) = (final_response.find('['), final_response.rfind(']')) {
+                final_response = final_response[start..=end].to_string();
+            }
+        }
 
         for res in tool_results {
             final_response.push_str(&format!("\n\n*System Action:* _{}_", res));
