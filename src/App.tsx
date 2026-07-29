@@ -66,16 +66,16 @@ const QUOTES = [
 ];
 
 const PERSONALITIES = [
-  { name: "Victor", emoji: "ðŸª–", description: "Strict tactical executive mentor." },
-  { name: "Morgan", emoji: "ðŸ–‹ï¸", description: "Razor-sharp, high-standard professor." },
-  { name: "Sam", emoji: "ðŸ•", description: "Friendly, chill down-to-earth roommate." },
-  { name: "Maya", emoji: "ðŸŒ»", description: "Warm, articulate, encouraging mentor." },
-  { name: "Leo", emoji: "â˜•", description: "Deadpan, sarcastic software developer." },
-  { name: "Felix", emoji: "ðŸš€", description: "Hyper-energetic chaos tech tinkerer." },
-  { name: "Ziggy", emoji: "ðŸ“»", description: "Smooth surrealist late-night philosopher." },
-  { name: "Nova", emoji: "âœ¨", description: "Fast-talking chaos hype-woman." },
-  { name: "Aria", emoji: "ðŸ§ª", description: "Eccentric theatrical mad scientist." },
-  { name: "Chloe", emoji: "ðŸ’…", description: "Dry-witted, zero-filter big sister." }
+  { name: "Victor", emoji: "⚔️", description: "Strict tactical executive mentor." },
+  { name: "Morgan", emoji: "👓", description: "Razor-sharp, high-standard professor." },
+  { name: "Sam", emoji: "🍕", description: "Friendly, chill down-to-earth roommate." },
+  { name: "Maya", emoji: "🌻", description: "Warm, articulate, encouraging mentor." },
+  { name: "Leo", emoji: "💻", description: "Deadpan, sarcastic software developer." },
+  { name: "Felix", emoji: "🚀", description: "Hyper-energetic chaos tech tinkerer." },
+  { name: "Ziggy", emoji: "📻", description: "Smooth surrealist late-night philosopher." },
+  { name: "Nova", emoji: "✨", description: "Fast-talking chaos hype-woman." },
+  { name: "Aria", emoji: "🧪", description: "Eccentric theatrical mad scientist." },
+  { name: "Chloe", emoji: "💅", description: "Dry-witted, zero-filter big sister." }
 ];
 
 const CATEGORY_COLORS: Record<string, string> = {
