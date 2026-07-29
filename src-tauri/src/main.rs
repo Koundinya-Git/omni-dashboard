@@ -21,23 +21,16 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use serde_json::json;
 
 const CREATE_NO_WINDOW: u32 = 0x08000000;
-
-                                            
-                           
-                                            
-                                                                                             
+                              
 pub struct DbState(pub Mutex<Connection>);
-
-                                                                                      
+                                                                  
 pub enum AudioCommand {
     Play(String),
     Stop,
 }
-
-                                                                              
+                                                                
 pub struct AudioState(pub Mutex<Sender<AudioCommand>>);
-
-                                                                                      
+                                                                      
 fn init_db() -> SqlResult<Connection> {
     let conn = Connection::open("omni_core.db")?;
 
@@ -163,7 +156,8 @@ fn init_db() -> SqlResult<Connection> {
             id TEXT PRIMARY KEY,
             textbook_id TEXT NOT NULL,
             page_number INTEGER NOT NULL,
-            content TEXT NOT NULL
+            content TEXT NOT NULL,
+            embedding TEXT NOT NULL
         )",
         [],
     )?;
@@ -269,6 +263,7 @@ fn init_db() -> SqlResult<Connection> {
         ),
         ("web_search_api", "SearXNG"),
         ("tts_wpm", "200"),
+        ("is_onboarded", "false"),
     ];
 
     for (k, v) in defaults {
@@ -359,6 +354,8 @@ pub struct UserSettings {
     pub tts_wpm: String,
     pub default_focus_time: String,
     pub default_break_time: String,
+    pub auto_record_meetings: String,
+    pub is_onboarded: String,
 }
                                                                           
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
@@ -478,6 +475,8 @@ fn get_user_settings_internal(conn: &Connection) -> UserSettings {
     let mut tts_wpm = String::from("200");
     let mut default_focus_time = String::from("25");
     let mut default_break_time = String::from("5");
+    let mut auto_record_meetings = String::from("true");
+    let mut is_onboarded = String::from("false");
 
     if let Ok(mut stmt) = conn.prepare("SELECT key, value FROM settings") {
         if let Ok(rows) = stmt.query_map([], |row| {
@@ -492,6 +491,8 @@ fn get_user_settings_internal(conn: &Connection) -> UserSettings {
                     "tts_wpm" => tts_wpm = r.1,
                     "default_focus_time" => default_focus_time = r.1,
                     "default_break_time" => default_break_time = r.1,
+                    "auto_record_meetings" => auto_record_meetings = r.1,
+                    "is_onboarded" => is_onboarded = r.1,
                     _ => {}
                 }
             }
@@ -506,6 +507,8 @@ fn get_user_settings_internal(conn: &Connection) -> UserSettings {
         tts_wpm,
         default_focus_time,
         default_break_time,
+        auto_record_meetings,
+        is_onboarded
     }
 }
 
@@ -670,46 +673,50 @@ fn fetch_textbook_context(conn: &Connection, attachment: &TextbookAttachment, us
     }
 
     if !extracted_pages {
-        context.push_str("- FULL BOOK ATTACHED. RELEVANT EXTRACTS DYNAMICALLY RETRIEVED BASED ON USER QUERY:\n");
+        context.push_str("- FULL BOOK ATTACHED. RELEVANT EXTRACTS DYNAMICALLY RETRIEVED VIA VECTOR RAG:\n");
 
-        let mut keywords = Vec::new();
-        for word in user_prompt.split_whitespace() {
-            let clean_word: String = word.chars().filter(|c| c.is_alphanumeric()).collect();
-            let clean_lower = clean_word.to_lowercase();
-            if clean_lower.len() > 4 && clean_lower != "please" && clean_lower != "could" && clean_lower != "about" {
-                keywords.push(clean_lower);
-            }
-        }
-
-        let mut scored_pages: Vec<(i32, String, usize)> = Vec::new();
-        if let Ok(mut stmt) = conn.prepare("SELECT page_number, content FROM textbook_pages WHERE textbook_id = ?1") {
-            if let Ok(page_iter) = stmt.query_map(params![attachment.textbook_id], |row| {
-                Ok((row.get::<_, i32>(0)?, row.get::<_, String>(1)?))
-            }) {
-                for page in page_iter.flatten() {
-                    let content_lower = page.1.to_lowercase();
-                    let mut score = 0;
-                    for kw in &keywords {
-                        score += content_lower.matches(kw).count();
-                    }
-                    if score > 0 {
-                        scored_pages.push((page.0, page.1, score));
-                    }
+        let mut prompt_vector: Vec<f64> = Vec::new();
+        if let Ok(res) = ureq::post("http://127.0.0.1:11434/api/embeddings").send_json(serde_json::json!({"model": "nomic-embed-text", "prompt": user_prompt})) {
+            if let Ok(json) = res.into_json::<serde_json::Value>() {
+                if let Some(arr) = json.get("embedding").and_then(|a| a.as_array()) {
+                    prompt_vector = arr.iter().filter_map(|v| v.as_f64()).collect();
                 }
             }
         }
 
-        scored_pages.sort_by(|a, b| b.2.cmp(&a.2));
+        let mut scored_pages: Vec<(i32, String, f64)> = Vec::new();
+        
+        if !prompt_vector.is_empty() {
+            if let Ok(mut stmt) = conn.prepare("SELECT page_number, content, embedding FROM textbook_pages WHERE textbook_id = ?1") {
+                if let Ok(page_iter) = stmt.query_map(params![attachment.textbook_id], |row| {
+                    Ok((row.get::<_, i32>(0)?, row.get::<_, String>(1)?, row.get::<_, String>(2)?))
+                }) {
+                    for page in page_iter.flatten() {
+                        let db_vec: Vec<f64> = serde_json::from_str(&page.2).unwrap_or_default();
+                        if db_vec.len() == prompt_vector.len() {
+                            let dot_product: f64 = prompt_vector.iter().zip(db_vec.iter()).map(|(a, b)| a * b).sum();
+                            let norm_a: f64 = prompt_vector.iter().map(|a| a * a).sum::<f64>().sqrt();
+                            let norm_b: f64 = db_vec.iter().map(|b| b * b).sum::<f64>().sqrt();
+                            let similarity = dot_product / (norm_a * norm_b);
+                            
+                            scored_pages.push((page.0, page.1, similarity));
+                        }
+                    }
+                }
+            }
+            
+            scored_pages.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap_or(std::cmp::Ordering::Equal));
+        }
 
         let mut took = 0;
         for page in scored_pages.iter().take(5) {
-            context.push_str(&format!("\n[PAGE {} EXTRACT (Relevance Score: {})]:\n{}\n", page.0, page.2, page.1));
+            context.push_str(&format!("\n[PAGE {} EXTRACT (Vector Match: {:.2})]:\n{}\n", page.0, page.2, page.1));
             took += 1;
         }
 
         if took == 0 {
-             context.push_str("(No specific keywords matched. Showing first pages instead.)\n");
-             if let Ok(mut stmt) = conn.prepare("SELECT page_number, content FROM textbook_pages WHERE textbook_id = ?1 ORDER BY page_number ASC LIMIT 3") {
+            context.push_str("(Vector search failed. Showing first pages instead.)\n");
+            if let Ok(mut stmt) = conn.prepare("SELECT page_number, content FROM textbook_pages WHERE textbook_id = ?1 ORDER BY page_number ASC LIMIT 3") {
                 if let Ok(page_iter) = stmt.query_map(params![attachment.textbook_id], |row| {
                     Ok((row.get::<_, i32>(0)?, row.get::<_, String>(1)?))
                 }) {
@@ -742,6 +749,8 @@ fn save_settings(db: State<'_, DbState>, settings: UserSettings) -> Result<(), S
         ("tts_wpm", settings.tts_wpm),
         ("default_focus_time", settings.default_focus_time),
         ("default_break_time", settings.default_break_time),
+        ("auto_record_meetings", settings.auto_record_meetings),
+        ("is_onboarded", settings.is_onboarded.clone()),
     ];
 
     for (k, v) in pairs {
@@ -1085,7 +1094,6 @@ fn del_deck(db: State<'_, DbState>, id: String) -> Result<(), String> {
 fn get_flashcards(db: State<'_, DbState>, deck_id: String) -> Result<Vec<Flashcard>, String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
     
-    // Changed "created_at" to "is_starred, next_review" to match your DB schema perfectly
     let mut stmt = conn.prepare("SELECT id, deck_id, front, back, is_starred, next_review FROM flashcards WHERE deck_id = ?1").map_err(|e| e.to_string())?;
     
     let iter = stmt.query_map(params![deck_id], |row| {
@@ -1112,14 +1120,12 @@ fn add_flashcards(db: State<'_, DbState>, deck_id: String, cards: Vec<serde_json
     let conn = db.0.lock().map_err(|e| e.to_string())?;
     
     for card in cards {
-        // AI models hallucinate keys. This safely catches "front", "question", or "q".
         let front = card.get("front").or(card.get("question")).or(card.get("q"))
             .and_then(|v| v.as_str()).unwrap_or("Empty Front").to_string();
             
         let back = card.get("back").or(card.get("answer")).or(card.get("a"))
             .and_then(|v| v.as_str()).unwrap_or("Empty Back").to_string();
 
-        // Generate a hyper-specific ID so cards don't overwrite each other
         let id = format!("card_{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_micros());
         std::thread::sleep(std::time::Duration::from_micros(2)); 
 
@@ -1716,6 +1722,7 @@ fn delete_offline_song(db: State<'_, DbState>, id: String, remove_file: bool) ->
     conn.execute("DELETE FROM offline_songs WHERE id = ?1", params![id]).map_err(|e| e.to_string())?;
     Ok(())
 }
+
 #[tauri::command]
 async fn import_pdf_textbook(
     db: State<'_, DbState>,
@@ -1738,30 +1745,39 @@ async fn import_pdf_textbook(
         params![id, title, author, course_id, file_path, total_pages, created_at],
     ).map_err(|e| e.to_string())?;
     
+    let ollama_url = "http://127.0.0.1:11434/api/embeddings";
+
     for (page_num, _) in doc.get_pages() {
         let text = doc.extract_text(&[page_num]).unwrap_or_default();
         let clean_text = text.trim();
         
         if !clean_text.is_empty() {
+             let embed_res = ureq::post(ollama_url)
+                .send_json(serde_json::json!({
+                    "model": "nomic-embed-text",
+                    "prompt": clean_text
+                }));
+
+             let mut embedding_str = String::from("[]");
+             if let Ok(res) = embed_res {
+                 if let Ok(json) = res.into_json::<serde_json::Value>() {
+                     if let Some(arr) = json.get("embedding") {
+                         embedding_str = arr.to_string(); 
+                     }
+                 }
+             }
+
              let page_row_id = format!("{}_p{}", id, page_num);
              let _ = conn.execute(
-                "INSERT INTO textbook_pages (id, textbook_id, page_number, content) VALUES (?1, ?2, ?3, ?4)",
-                params![page_row_id, id, page_num, clean_text],
+                "INSERT INTO textbook_pages (id, textbook_id, page_number, content, embedding) VALUES (?1, ?2, ?3, ?4, ?5)",
+                params![page_row_id, id, page_num, clean_text, embedding_str],
              );
         }
     }
 
-    Ok(TextbookItem {
-        id,
-        title,
-        author,
-        course_id,
-        file_path,
-        total_pages,
-        created_at,
-    })
+    Ok(TextbookItem { id, title, author, course_id, file_path, total_pages, created_at })
 }
-                                                                  
+
 #[tauri::command]
 fn get_textbooks(db: State<'_, DbState>) -> Result<Vec<TextbookItem>, String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
@@ -2110,7 +2126,7 @@ fn get_telemetry_stats(db: State<'_, DbState>) -> Result<serde_json::Value, Stri
         "top_apps": top_apps
     }))
 }
-                                                                                  
+
 #[tauri::command]
 fn read_aloud(
     state: State<'_, AudioState>,
@@ -2645,16 +2661,17 @@ fn main() {
                 .build(app)?;
                                                                                                      
             tauri::async_runtime::spawn(async move {
-                                                                                                                 
                 if let Ok(conn) = Connection::open("omni_core.db") {
+                    let mut is_recording_meeting = false;
+                    let mut ffmpeg_child: Option<std::process::Child> = None;
+
                     loop {
                         let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as i64;
                         
                         if let Ok(window) = get_active_window() {
                             let app_name = window.app_name.to_lowercase();
                             let title = window.title.to_lowercase();
-                            
-                                                                                
+
                             let category = if app_name.contains("code") || app_name.contains("cursor") || title.contains("omni-core") || app_name.contains("terminal") {
                                 "Deep Work"
                             } else if app_name.contains("chrome") || app_name.contains("edge") || app_name.contains("brave") || app_name.contains("opera") || app_name.contains("firefox") || app_name.contains("vivaldi") || app_name.contains("safari") || app_name.contains("chromium") {
@@ -2672,10 +2689,77 @@ fn main() {
                             let id = format!("log_{}", now);
                             let _ = conn.execute(
                                 "INSERT INTO immutable_telemetry (id, timestamp, app_name, window_title, category) VALUES (?1, ?2, ?3, ?4, ?5)",
-                                params![id, now, window.app_name, window.title, category],
+                                params![id, now, window.app_name.clone(), window.title.clone(), category],
                             );
+
+                            let is_meeting = app_name.contains("zoom") || app_name.contains("teams") || title.contains("google meet") || title.contains("zoom meeting");
+                            
+                            let mut auto_record_enabled = true;
+                            if let Ok(mut stmt) = conn.prepare("SELECT value FROM settings WHERE key = 'auto_record_meetings'") {
+                                if let Ok(mut rows) = stmt.query([]) {
+                                    if let Ok(Some(row)) = rows.next() {
+                                        let val: String = row.get(0).unwrap_or_default();
+                                        auto_record_enabled = val == "true";
+                                    }
+                                }
+                            }
+
+                            if is_meeting && auto_record_enabled && !is_recording_meeting {
+                                println!("[WHISPER] Meeting detected! Initiating silent audio capture...");
+                                is_recording_meeting = true;
+ 
+                                if let Ok(child) = std::process::Command::new("ffmpeg")
+                                    .args(&["-f", "dshow", "-i", "audio=Stereo Mix", "-y", "temp_meeting.wav"])
+                                    .creation_flags(0x08000000) 
+                                    .spawn() 
+                                {
+                                    ffmpeg_child = Some(child);
+                                } else {
+                                    println!("[WHISPER WARNING] Failed to start ffmpeg. Is it installed?");
+                                }
+                            } 
+                            else if !is_meeting && is_recording_meeting {
+                                println!("[WHISPER] Meeting ended. Pumping audio through Neural Engine...");
+                                is_recording_meeting = false;
+                                
+                                if let Some(mut child) = ffmpeg_child.take() {
+                                    let _ = child.kill();
+                                    let _ = child.wait();
+                                }
+                                
+                                let base_dir = std::env::current_dir().unwrap_or_default();
+                                let whisper_exe = base_dir.join("whisper").join("main.exe");
+                                let model_path = base_dir.join("whisper").join("ggml-base.en.bin");
+                                
+                                if whisper_exe.exists() && model_path.exists() {
+                                    let whisper_res = std::process::Command::new(&whisper_exe)
+                                        .args(&["-m", model_path.to_str().unwrap(), "-f", "temp_meeting.wav", "-otxt"])
+                                        .creation_flags(0x08000000)
+                                        .output();
+                                        
+                                    if whisper_res.is_ok() {
+                                        let txt_file = "temp_meeting.wav.txt";
+                                        
+                                        if let Ok(transcript) = std::fs::read_to_string(txt_file) {
+                                            let note_id = format!("meeting_{}", now);
+                                            let note_title = format!("Auto-Transcript: {}", window.title);
+                                            
+                                            let _ = conn.execute(
+                                                "INSERT INTO notes (id, title, content, course_id) VALUES (?1, ?2, ?3, ?4)",
+                                                params![note_id, note_title, transcript, ""],
+                                            );
+                                            println!("[WHISPER] Transcript saved to vault successfully!");
+                                            
+                                            let _ = std::fs::remove_file("temp_meeting.wav");
+                                            let _ = std::fs::remove_file(txt_file);
+                                        }
+                                    }
+                                } else {
+                                    println!("[WHISPER WARNING] whisper/main.exe or ggml-base.en.bin not found in src-tauri.");
+                                }
+                            }
                         }
-                                                                                              
+                        
                         tokio::time::sleep(Duration::from_secs(10)).await;
                     }
                 }

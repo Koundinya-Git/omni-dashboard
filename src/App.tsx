@@ -30,7 +30,7 @@ interface Workspace { id: string; name: string; created_at: number; }
 interface ChatSession { id: string; title: string; workspace_id: string; created_at: number; updated_at: number; }
 interface UserSettings { 
   user_name: string; user_bio: string; custom_instructions: string; web_search_api: string; tts_wpm: string;
-  default_focus_time: string; default_break_time: string;
+  default_focus_time: string; default_break_time: string; auto_record_meetings: string; is_onboarded: string;
 }
 interface FocusSession { id: string; task_id: string; title?: string; duration_minutes: number; timestamp: number; }
 interface YTMusicSong { videoId: string; title: string; artists: {name: string}[]; thumbnails: {url: string}[]; duration: string; }
@@ -103,7 +103,7 @@ export default function App() {
   const [selectedTier, setSelectedTier] = useState<string>('General');
   const [selectedPersona, setSelectedPersona] = useState(PERSONALITIES[0]);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [settings, setSettings] = useState<UserSettings>({ user_name: '', user_bio: '', custom_instructions: '', web_search_api: 'SearXNG', tts_wpm: '200', default_focus_time: '25', default_break_time: '5' });
+  const [settings, setSettings] = useState<UserSettings>({ user_name: '', user_bio: '', custom_instructions: '', web_search_api: 'SearXNG', tts_wpm: '200', default_focus_time: '25', default_break_time: '5', auto_record_meetings: 'true', is_onboarded: 'false'});
 
   const [isListening, setIsListening] = useState(false);
   const [readingMessageIdx, setReadingMessageIdx] = useState<number | null>(null);
@@ -192,6 +192,9 @@ export default function App() {
   const [isSummarizing, setIsSummarizing] = useState(false);
   const [isScheduling, setIsScheduling] = useState(false);
 
+  const [isOnboarding, setIsOnboarding] = useState(false);
+  const [onboardingStep, setOnboardingStep] = useState(1);
+
   useEffect(() => {
     fetchTasks(); fetchNotes(); fetchCourses(); loadWorkspacesAndSessions();
     loadSettings(); loadFocusSessions(); loadPlaylists(); loadOfflineSongs(); 
@@ -241,6 +244,40 @@ export default function App() {
   }, [settings.default_focus_time, isFocusing]);
 
   useEffect(() => {
+    let victorInterval: number | undefined;
+    
+    if (isFocusing) {
+      victorInterval = window.setInterval(async () => {
+        try {
+          const win = await invoke<any>('get_active_app_telemetry');
+          
+          if (win.status === "online") {
+            const appName = (win.app_name || "").toLowerCase();
+            const title = (win.title || "").toLowerCase();
+            
+            const isBrowser = appName.includes("chrome") || appName.includes("edge") || appName.includes("brave") || appName.includes("firefox");
+            const isSocialSite = title.includes("youtube") || title.includes("twitter") || title.includes("x.com") || title.includes("reddit") || title.includes("instagram") || title.includes("tiktok");
+            const isDistractingApp = appName.includes("discord") || appName.includes("steam") || appName.includes("epicgames");
+
+            if ((isBrowser && isSocialSite) || isDistractingApp) {
+              console.log("Caught slacking. Executing Victor Protocol.");
+              await invoke('kill_process_and_yell', { 
+                processId: win.process_id, 
+                appName: win.app_name, 
+                title: win.title 
+              });
+            }
+          }
+        } catch (e) { 
+          console.error("Victor Protocol Scanner Error:", e); 
+        }
+      }, 3000); 
+    }
+    
+    return () => clearInterval(victorInterval);
+  }, [isFocusing]);
+
+  useEffect(() => {
     let interval: number | undefined;
     if (isFocusing && focusTimeLeft > 0) interval = window.setInterval(() => setFocusTimeLeft(prev => prev - 1), 1000);
     else if (isFocusing && focusTimeLeft <= 0) handleFocusComplete();
@@ -252,6 +289,13 @@ export default function App() {
     if (isMusicSidebarOpen) document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isMusicSidebarOpen]);
+
+  const handleCompleteOnboarding = async () => {
+    const updated = { ...settings, is_onboarded: 'true' };
+    setSettings(updated);
+    setIsOnboarding(false);
+    await handleSaveSettings(updated);
+  };
 
   const showConfirm = (title: string, message?: string): Promise<boolean> => new Promise((resolve) => setDialog({ isOpen: true, type: 'confirm', title, message, value: '', resolveConfirm: resolve }));
   const showPrompt = (title: string, defaultValue: string = '', placeholder?: string): Promise<string | null> => new Promise((resolve) => setDialog({ isOpen: true, type: 'prompt', title, value: defaultValue, placeholder, resolvePrompt: resolve }));
@@ -283,13 +327,32 @@ export default function App() {
     }
   };
 
-  const loadSettings = async () => { try { setSettings(await invoke<UserSettings>('get_settings')); } catch (e) { console.error(e); } };
+  const loadSettings = async () => { 
+    try { 
+      const s = await invoke<UserSettings>('get_settings');
+      setSettings(s);
+      if (s.is_onboarded === 'false') {
+        setIsOnboarding(true);
+      }
+    } catch (e) { console.error(e); } 
+  };
+
   const handleSaveSettings = async (updatedSettings?: UserSettings) => { try { await invoke('save_settings', { settings: updatedSettings || settings }); if (!updatedSettings) setIsSettingsOpen(false); } catch (e) { console.error(e); } };
   const handleFocusSettingChange = (field: 'default_focus_time' | 'default_break_time', value: string) => { const newSettings = { ...settings, [field]: value }; setSettings(newSettings); handleSaveSettings(newSettings); };
   
   const loadFocusSessions = async () => { try { setPastFocusSessions(await invoke<FocusSession[]>('get_focus_sessions')); } catch (e) { console.error(e); } };
-  const handleStartFocus = () => { const focusMins = parseInt(settings.default_focus_time) || 25; setFocusDurationMinutes(focusMins); setFocusTimeLeft(focusMins * 60); setIsFocusing(true); };
-  const handleStopFocus = () => { setIsFocusing(false); const focusMins = parseInt(settings.default_focus_time) || 25; setFocusTimeLeft(focusMins * 60); };
+  const handleStartFocus = () => { 
+    const focusMins = parseInt(settings.default_focus_time) || 25; 
+    setFocusDurationMinutes(focusMins); 
+    setFocusTimeLeft(focusMins * 60); 
+    setIsFocusing(true); 
+  };
+
+  const handleStopFocus = () => { 
+    setIsFocusing(false); 
+    const focusMins = parseInt(settings.default_focus_time) || 25; 
+    setFocusTimeLeft(focusMins * 60); 
+  };
   
   const handleFocusComplete = async () => {
     setIsFocusing(false);
@@ -523,7 +586,7 @@ export default function App() {
         currentEpochMs: Date.now(),
         startOfTodayMs: new Date().setHours(0,0,0,0)
       });
-      // Strip out any action tags just in case
+
       setSummaryOutput(response.replace(/\[ACT:.*?\]/g, '').trim());
     } catch (e: any) {
       console.error(e);
@@ -544,7 +607,7 @@ export default function App() {
       
       await invoke<string>('ask_ollama', {
         messages: [{ role: 'user', content: prompt }],
-        persona: "Victor", // Force Victor so it's strict and executes the tags
+        persona: "Victor", 
         modelTier: selectedTier,
         searchWeb: false,
         attachedTextbook: null,
@@ -554,7 +617,7 @@ export default function App() {
       });
       
       await loadCalendarEvents();
-      setActiveTab('calendar'); // Jump to the calendar to see the magic
+      setActiveTab('calendar');  
     } catch (e: any) {
       console.error(e);
       alert("Scheduling failed: " + e.message);
@@ -591,7 +654,7 @@ export default function App() {
 
       const response = await invoke<string>('ask_ollama', { 
         messages: [{ role: 'user', content: finalPrompt }], 
-        persona: "Morgan", // Using Morgan as she is strict
+        persona: "Morgan", 
         modelTier: selectedTier, 
         searchWeb: searchWebEnabled || sourceType === 'Custom', 
         attachedTextbook: attachedTextbook, 
@@ -2220,7 +2283,7 @@ export default function App() {
                               </table>
                           </div>
                       </div>
-                      <div className="text-center text-[10px] text-gray-600 font-mono pb-8">Omni-Core Â© 2026 Koundinya Gajulapalli. Licensed under GPL v3.</div>
+                      <div className="text-center text-[10px] text-gray-600 font-mono pb-8">Omni-Core © 2026 Koundinya Gajulapalli. Licensed under GPL v3.</div>
                   </div>
               )}
             </div>
@@ -2263,7 +2326,7 @@ export default function App() {
                  </div>
                  
                  <div className="mt-12 text-center text-xs text-gray-500 font-mono pt-6 border-t border-gray-800 pb-12">
-                    Copyright Â© 2026 Koundinya Gajulapalli.<br/>Licensed under GNU General Public License v3 (GPLv3).
+                    Copyright © 2026 Koundinya Gajulapalli.<br/>Licensed under GNU General Public License v3 (GPLv3).
                  </div>
               </div>
             </div>
@@ -2664,6 +2727,24 @@ export default function App() {
                 />
               </div>
               
+              <div className="flex items-center justify-between p-4 bg-[#212121] border border-gray-700 rounded-xl mt-4">
+                <div className="flex flex-col pr-4">
+                    <span className="text-sm font-bold text-gray-200 flex items-center gap-2">
+                        <Mic className="w-4 h-4 text-red-500" /> Auto-Transcribe Meetings
+                    </span>
+                    <span className="text-xs text-gray-500 mt-1 leading-relaxed">Automatically capture and summarize Zoom/Teams audio to your Vault in the background.</span>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                  <input 
+                    type="checkbox" 
+                    className="sr-only peer" 
+                    checked={settings.auto_record_meetings === 'true'} 
+                    onChange={(e) => setSettings({...settings, auto_record_meetings: e.target.checked ? 'true' : 'false'})} 
+                  />
+                  <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500 shadow-inner"></div>
+                </label>
+              </div>
+
               <div className="flex flex-col gap-1.5">
                 <div className="flex justify-between items-center mb-1">
                   <label className="text-sm font-medium text-gray-400">Voice Synthesis Speed (WPM)</label>
@@ -2689,7 +2770,7 @@ export default function App() {
             </div>
 
             <div className="p-4 border-t border-gray-800 bg-[#171717] flex justify-between items-center">
-              <span className="text-[10px] text-gray-500 font-mono ml-2">Â© 2026 Koundinya Gajulapalli (GPL v3)</span>
+              <span className="text-[10px] text-gray-500 font-mono ml-2">Copyright © 2026 Koundinya Gajulapalli (GPL v3)</span>
               <div className="flex gap-3">
                  <button 
                    onClick={() => setIsSettingsOpen(false)} 
@@ -2705,6 +2786,102 @@ export default function App() {
                  </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- FIRST BOOT INITIALIZATION SEQUENCE --- */}
+      {isOnboarding && (
+        <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[200] flex items-center justify-center animate-in fade-in duration-1000">
+          <div className="w-full max-w-2xl bg-[#111] border border-emerald-500/30 rounded-3xl p-10 shadow-[0_0_50px_rgba(16,185,129,0.1)] relative overflow-hidden">
+            
+            <div className="absolute top-0 left-0 w-full h-1 bg-gray-800">
+              <div className="h-full bg-emerald-500 transition-all duration-500" style={{ width: `${(onboardingStep / 3) * 100}%` }}></div>
+            </div>
+
+            {onboardingStep === 1 && (
+              <div className="flex flex-col animate-in slide-in-from-right-8 duration-500">
+                <BrainCircuit className="w-16 h-16 text-emerald-500 mb-6 animate-pulse" />
+                <h1 className="text-4xl font-bold text-white mb-2 tracking-tight">System Initialization.</h1>
+                <p className="text-gray-400 mb-8">Welcome to Omni-Core. Let's calibrate your local environment.</p>
+                
+                <div className="space-y-5">
+                  <div>
+                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 block">Executive Callsign</label>
+                    <input autoFocus type="text" value={settings.user_name} onChange={e => setSettings({...settings, user_name: e.target.value})} placeholder="What should I call you?" className="w-full bg-[#1a1a1a] border border-gray-700 rounded-xl px-4 py-3 outline-none focus:border-emerald-500 text-white" />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 block">Primary Directive / Bio</label>
+                    <textarea value={settings.user_bio} onChange={e => setSettings({...settings, user_bio: e.target.value})} placeholder="Briefly describe what you do (e.g., Computer Science Student, Software Engineer). I will use this context for future advice." className="w-full bg-[#1a1a1a] border border-gray-700 rounded-xl px-4 py-3 outline-none focus:border-emerald-500 text-white min-h-[100px] resize-none" />
+                  </div>
+                </div>
+                <div className="mt-8 flex justify-end">
+                  <button onClick={() => setOnboardingStep(2)} disabled={!settings.user_name} className="px-6 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-medium rounded-xl transition-colors disabled:opacity-50">Next Protocol</button>
+                </div>
+              </div>
+            )}
+
+            {onboardingStep === 2 && (
+              <div className="flex flex-col animate-in slide-in-from-right-8 duration-500">
+                <Activity className="w-16 h-16 text-blue-500 mb-6" />
+                <h1 className="text-4xl font-bold text-white mb-2 tracking-tight">Neural Configuration.</h1>
+                <p className="text-gray-400 mb-8">Establish your interaction parameters.</p>
+                
+                <div className="space-y-6">
+                  <div>
+                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 block">Default Assistant Persona</label>
+                    <div className="grid grid-cols-2 gap-3 max-h-[200px] overflow-y-auto custom-scrollbar pr-2">
+                      {PERSONALITIES.map(p => (
+                        <button key={p.name} onClick={() => setSelectedPersona(p)} className={`p-3 rounded-xl border text-left transition-colors flex flex-col gap-1 ${selectedPersona.name === p.name ? 'bg-blue-500/20 border-blue-500' : 'bg-[#1a1a1a] border-gray-700 hover:border-gray-500'}`}>
+                          <span className="text-sm font-bold text-white">{p.emoji} {p.name}</span>
+                          <span className="text-[10px] text-gray-400 line-clamp-2">{p.description}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-8 flex justify-between">
+                  <button onClick={() => setOnboardingStep(1)} className="px-6 py-3 text-gray-400 hover:text-white transition-colors">Back</button>
+                  <button onClick={() => setOnboardingStep(3)} className="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-xl transition-colors">Confirm Setup</button>
+                </div>
+              </div>
+            )}
+
+            {onboardingStep === 3 && (
+              <div className="flex flex-col animate-in slide-in-from-right-8 duration-500">
+                <CheckCircle2 className="w-16 h-16 text-emerald-500 mb-6" />
+                <h1 className="text-4xl font-bold text-white mb-2 tracking-tight">Pre-Flight Checklist.</h1>
+                <p className="text-gray-400 mb-8">Because Omni-Core is 100% local, ensure your system is primed.</p>
+                
+                <div className="space-y-4">
+                  <div className="flex items-center gap-4 bg-[#1a1a1a] p-4 rounded-xl border border-gray-800">
+                    <div className="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-500">1</div>
+                    <div>
+                      <h4 className="text-sm font-bold text-white">Ollama Daemon Active</h4>
+                      <p className="text-xs text-gray-500">Ensure Ollama is running in the background.</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-4 bg-[#1a1a1a] p-4 rounded-xl border border-gray-800">
+                    <div className="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-500">2</div>
+                    <div>
+                      <h4 className="text-sm font-bold text-white">Models Pulled</h4>
+                      <p className="text-xs text-gray-500">Run <code className="bg-black px-1 rounded">ollama pull llama3.2:3b</code> and <code className="bg-black px-1 rounded">nomic-embed-text</code></p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-4 bg-[#1a1a1a] p-4 rounded-xl border border-gray-800">
+                    <div className="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-500">3</div>
+                    <div>
+                      <h4 className="text-sm font-bold text-white">Binaries Loaded</h4>
+                      <p className="text-xs text-gray-500">Piper TTS & Whisper models in <code className="bg-black px-1 rounded">src-tauri</code></p>
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-8 flex justify-between">
+                  <button onClick={() => setOnboardingStep(2)} className="px-6 py-3 text-gray-400 hover:text-white transition-colors">Back</button>
+                  <button onClick={handleCompleteOnboarding} className="px-8 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl transition-all shadow-lg shadow-emerald-900/40 hover:scale-105">Boot Omni-Core</button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -2800,3 +2977,4 @@ function SessionItem({
     </div>
   );
 }
+
