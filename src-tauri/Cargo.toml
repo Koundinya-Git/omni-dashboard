@@ -1,9 +1,9 @@
 [package]
 name = "omni-dashboard"
 version = "0.1.0"
-description = "A local AI continuous capture dashboard"
-authors = ["You"]
-edition = "2021"
+description = "A Student Assistant"
+authors = ["KoundinyaG"]
+edition = "2024"
 
 [build-dependencies]
 tauri-build = { version = "2.0.0", features = [] }

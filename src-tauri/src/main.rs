@@ -22,22 +22,22 @@ use serde_json::json;
 
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 
-// ==========================================
-// 1. DATABASE SETUP & STATE
-// ==========================================
-// Shared application state that holds the SQLite connection for all database-backed commands.
+                                            
+                           
+                                            
+                                                                                             
 pub struct DbState(pub Mutex<Connection>);
 
-// Messages sent to the background audio thread so playback can be controlled remotely.
+                                                                                      
 pub enum AudioCommand {
     Play(String),
     Stop,
 }
 
-// Shared state used by the text-to-speech subsystem to send playback commands.
+                                                                              
 pub struct AudioState(pub Mutex<Sender<AudioCommand>>);
 
-// Initializes the SQLite database schema and seeds default settings values on startup.
+                                                                                      
 fn init_db() -> SqlResult<Connection> {
     let conn = Connection::open("omni_core.db")?;
 
@@ -200,8 +200,7 @@ fn init_db() -> SqlResult<Connection> {
         )",
         [],
     )?;
-
-    // --- IMMUTABLE TELEMETRY TRACKING TABLES ---
+                                 
     conn.execute(
         "CREATE TABLE IF NOT EXISTS immutable_telemetry (
             id TEXT PRIMARY KEY,
@@ -221,8 +220,6 @@ fn init_db() -> SqlResult<Connection> {
         )",
         [],
     )?;
-
-// For the Goals Trajectory Tabling in the Database
 
     conn.execute(
         "CREATE TABLE IF NOT EXISTS goals (
@@ -293,8 +290,7 @@ fn init_db() -> SqlResult<Connection> {
 
     Ok(conn)
 }
-
-// Represents a single task row in the productivity matrix.
+                                    
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct TaskItem {
     pub id: String,
@@ -302,8 +298,7 @@ pub struct TaskItem {
     pub quadrant: i32,
     pub completed: bool,
 }
-
-// Represents a saved note attached to a course or workspace.
+                                                 
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct NoteItem {
     pub id: String,
@@ -311,8 +306,7 @@ pub struct NoteItem {
     pub content: String,
     pub course_id: String,
 }
-
-// Represents a course or subject used to organize notes and textbooks.
+                                                               
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct CourseItem {
     pub id: String,
@@ -321,16 +315,14 @@ pub struct CourseItem {
     pub description: String,
     pub color: String,
 }
-
-// Represents a user-created workspace that groups related chat sessions.
+                                                                 
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct WorkspaceItem {
     pub id: String,
     pub name: String,
     pub created_at: i64,
 }
-
-// Represents an individual chat session in the main dashboard experience.
+                                                                      
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct ChatSessionItem {
     pub id: String,
@@ -339,8 +331,7 @@ pub struct ChatSessionItem {
     pub created_at: i64,
     pub updated_at: i64,
 }
-
-// Represents a single message inside a chat session.
+                                                
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct ChatItem {
     pub id: String,
@@ -349,8 +340,7 @@ pub struct ChatItem {
     pub content: String,
     pub timestamp: i64,
 }
-
-// Represents a completed or logged focus session tied to a task.
+                                                            
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct FocusSessionItem {
     pub id: String,
@@ -359,8 +349,7 @@ pub struct FocusSessionItem {
     pub timestamp: i64,
     pub title: Option<String>,
 }
-
-// Stores the user preferences and assistant behavior settings used by the app.
+                                                                        
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 pub struct UserSettings {
     pub user_name: String,
@@ -371,8 +360,7 @@ pub struct UserSettings {
     pub default_focus_time: String,
     pub default_break_time: String,
 }
-
-// Describes a YouTube Music result that can be added to playlists or downloaded.
+                                                                          
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 #[allow(non_snake_case)]
 pub struct YTMusicSong {
@@ -382,20 +370,17 @@ pub struct YTMusicSong {
     pub thumbnails: Vec<Thumbnail>,
     pub duration: String,
 }
-
-// Small helper type used to represent an artist attached to a song result.
+                                                                     
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct Artist {
     pub name: String,
 }
-
-// Small helper type used to hold a thumbnail URL for a song result.
+                                                            
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct Thumbnail {
     pub url: String,
 }
-
-// Represents a saved playlist containing a collection of music items.
+                                                                     
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct PlaylistItem {
     pub id: String,
@@ -404,8 +389,7 @@ pub struct PlaylistItem {
     pub songs: Vec<YTMusicSong>,
     pub created_at: i64,
 }
-
-// Represents a song that is available locally on disk, either downloaded or imported.
+                                                                                     
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct OfflineSongItem {
     pub id: String,
@@ -416,8 +400,7 @@ pub struct OfflineSongItem {
     pub thumbnail_url: String,
     pub source: String, 
 }
-
-// Represents a textbook imported into the knowledge vault.
+                                                          
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct TextbookItem {
     pub id: String,
@@ -428,8 +411,7 @@ pub struct TextbookItem {
     pub total_pages: i32,
     pub created_at: i64,
 }
-
-// Describes a textbook attachment supplied with a user prompt, including page selection details.
+                                                                                                
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct TextbookAttachment {
     pub textbook_id: String,
@@ -437,8 +419,7 @@ pub struct TextbookAttachment {
     pub page_end: Option<i32>,
     pub exact_snippet: Option<String>,
 }
-
-// Represents a collection of textbooks grouped into a study set.
+                                                                
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct BookSetItem {
     pub id: String,
@@ -446,8 +427,7 @@ pub struct BookSetItem {
     pub created_at: i64,
     pub textbook_ids: Vec<String>,
 }
-
-// Represents a calendar event persisted in the app database.
+                                                            
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct CalendarEventItem {
     pub id: String,
@@ -460,8 +440,7 @@ pub struct CalendarEventItem {
     pub color: String,
     pub is_all_day: bool,
 }
-
-// Represents a long-term user goal with AI-driven trajectory scoring
+                                                                    
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct GoalItem{
     pub id: String,
@@ -476,8 +455,8 @@ pub struct GoalItem{
 pub struct FlashcardDeck {
     pub id: String,
     pub title: String,
-    pub category: String, // 'Textbook', 'Note', 'LiveContext', 'Custom'
-    pub subcategory: String, // Course ID or Date String
+    pub category: String,                                              
+    pub subcategory: String,                           
     pub created_at: i64,
 }
 
@@ -490,11 +469,7 @@ pub struct Flashcard {
     pub is_starred: bool,
     pub next_review: i64,
 }
-
-// ==========================================
-// 2. CONTEXT HYDRATION ENGINE
-// ==========================================
-// Loads the stored user settings from the database and returns them as a structured object.
+                                                                               
 fn get_user_settings_internal(conn: &Connection) -> UserSettings {
     let mut user_name = String::from("User");
     let mut user_bio = String::new();
@@ -534,7 +509,7 @@ fn get_user_settings_internal(conn: &Connection) -> UserSettings {
     }
 }
 
-// Builds the rich database context that is injected into the LLM prompt.
+                                                                        
 fn build_db_context(conn: &Connection) -> String {
     let settings = get_user_settings_internal(conn);
     let mut context = String::from("\n\n=== OMNI-CORE SYSTEM CONTEXT & USER PROFILE ===\n");
@@ -553,7 +528,7 @@ fn build_db_context(conn: &Connection) -> String {
     let current_time = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as i64;
     let one_day_ms = 86_400_000;
     
-    // LIVE MEMORY INJECTION (The Observer Effect)
+                                                 
     context.push_str("\n--- LIVE MEMORY CONTEXT (OBSERVER EFFECT) ---\n");
     let one_hour_ago = current_time - 3_600_000;
     if let Ok(mut stmt) = conn.prepare("SELECT app_name, window_title, category, COUNT(*) as time_spent FROM immutable_telemetry WHERE timestamp > ?1 GROUP BY window_title ORDER BY time_spent DESC LIMIT 5") {
@@ -562,7 +537,7 @@ fn build_db_context(conn: &Connection) -> String {
                 row.get::<_, String>(0)?,
                 row.get::<_, String>(1)?,
                 row.get::<_, String>(2)?,
-                row.get::<_, i32>(3)? * 10, // 10 seconds per heartbeat
+                row.get::<_, i32>(3)? * 10,                           
             ))
         }) {
             let mut found = false;
@@ -659,7 +634,7 @@ fn build_db_context(conn: &Connection) -> String {
     context
 }
 
-// Pulls relevant textbook content into the prompt so questions about attached documents can be answered with context.
+                                                                                                                     
 fn fetch_textbook_context(conn: &Connection, attachment: &TextbookAttachment, user_prompt: &str) -> String {
     let mut context = String::from("\n\n=== ATTACHED TEXTBOOK DOCUMENT CONTEXT ===\n");
     
@@ -749,32 +724,12 @@ fn fetch_textbook_context(conn: &Connection, attachment: &TextbookAttachment, us
     context.push_str("\nCRITICAL INSTRUCTION: If answering questions about this attached document, YOU MUST CITE SPECIFIC PAGE NUMBERS from the extracts provided above.\n================================================\n");
     context
 }
-
-// ==========================================
-// 3. DATABASE COMMANDS
-// ==========================================
-
-// -----------------------------------------------------------------------------
-// SETTINGS AND WORKSPACE MANAGEMENT COMMANDS
-// -----------------------------------------------------------------------------
-// This cluster of handlers is responsible for the app's lightweight configuration
-// and organization layer. It allows the UI to read and write the user's profile
-// preferences and to manage top-level workspaces that group related chats.
-// These commands are intentionally small and direct because they sit right at the
-// boundary between the frontend and the persistent SQLite store.
-
-// Returns the current user preferences from the settings table.
-// This is used by the dashboard whenever the UI needs to render the user's name,
-// biography, assistant instructions, or default productivity settings.
+                                                 
 #[tauri::command]
 fn get_settings(db: State<'_, DbState>) -> Result<UserSettings, String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
     Ok(get_user_settings_internal(&conn))
 }
-
-// Persists updated user preferences into the settings table.
-// The frontend sends a fully populated UserSettings object and this function writes
-// each field into the settings key/value table, replacing existing values when needed.
 #[tauri::command]
 fn save_settings(db: State<'_, DbState>, settings: UserSettings) -> Result<(), String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
@@ -799,10 +754,7 @@ fn save_settings(db: State<'_, DbState>, settings: UserSettings) -> Result<(), S
 
     Ok(())
 }
-
-// Fetches all workspaces from the database in creation order.
-// Workspaces are the top-level containers for chat sessions and serve as a simple
-// organizing structure for the dashboard experience.
+                                                                                       
 #[tauri::command]
 fn get_workspaces(db: State<'_, DbState>) -> Result<Vec<WorkspaceItem>, String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
@@ -826,10 +778,6 @@ fn get_workspaces(db: State<'_, DbState>) -> Result<Vec<WorkspaceItem>, String> 
     }
     Ok(list)
 }
-
-// Creates a new workspace entry that can later contain chat sessions.
-// The UI sends a generated identifier, a user-facing name, and a creation timestamp.
-// This makes the workspace visible in the sidebar and ready to host nested conversations.
 #[tauri::command]
 fn create_workspace(
     db: State<'_, DbState>,
@@ -844,11 +792,8 @@ fn create_workspace(
     )
     .map_err(|e| e.to_string())?;
     Ok(())
-}
-
-// Renames an existing workspace using its identifier.
-// This is a simple metadata update that keeps the workspace name aligned with the
-// user's current mental model while preserving the rest of the record.
+}                                                                
+                                                                      
 #[tauri::command]
 fn rename_workspace(db: State<'_, DbState>, id: String, name: String) -> Result<(), String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
@@ -859,10 +804,6 @@ fn rename_workspace(db: State<'_, DbState>, id: String, name: String) -> Result<
     .map_err(|e| e.to_string())?;
     Ok(())
 }
-
-// Removes a workspace and unassigns any chat sessions that belonged to it.
-// Deleting a workspace should not erase the chat history entirely, so this function
-// clears any lingering workspace references before removing the workspace row itself.
 #[tauri::command]
 fn delete_workspace(db: State<'_, DbState>, id: String) -> Result<(), String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
@@ -876,17 +817,7 @@ fn delete_workspace(db: State<'_, DbState>, id: String) -> Result<(), String> {
         .map_err(|e| e.to_string())?;
     Ok(())
 }
-
-// -----------------------------------------------------------------------------
-// CHAT SESSION AND MESSAGE HANDLERS
-// -----------------------------------------------------------------------------
-// These commands form the persistence layer for the assistant conversation experience.
-// They let the frontend create, rename, reorganize, and delete chat threads while
-// also storing each message in a way that can be retrieved later for context building.
-
-// Returns all chat sessions sorted by recency so the UI can render them quickly.
-// The ordering is reversed by updated_at so the most recently active conversations
-// appear first in the sidebar or workspace views.
+                                
 #[tauri::command]
 fn get_chat_sessions(db: State<'_, DbState>) -> Result<Vec<ChatSessionItem>, String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
@@ -912,10 +843,6 @@ fn get_chat_sessions(db: State<'_, DbState>) -> Result<Vec<ChatSessionItem>, Str
     }
     Ok(list)
 }
-
-// Creates a new chat session and stores its initial metadata.
-// This is typically called when the user starts a new conversation or creates a
-// new workspace-backed thread for a specific task or topic.
 #[tauri::command]
 fn create_chat_session(
     db: State<'_, DbState>,
@@ -932,10 +859,7 @@ fn create_chat_session(
     .map_err(|e| e.to_string())?;
     Ok(())
 }
-
-// Updates the title of a chat session after a user renames it.
-// This keeps the visible chat label aligned with the user's intent without changing
-// the underlying conversation history or identity.
+                                  
 #[tauri::command]
 fn rename_chat_session(db: State<'_, DbState>, id: String, title: String) -> Result<(), String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
@@ -946,10 +870,6 @@ fn rename_chat_session(db: State<'_, DbState>, id: String, title: String) -> Res
     .map_err(|e| e.to_string())?;
     Ok(())
 }
-
-// Reassigns a chat session to a different workspace.
-// This is useful when a conversation evolves from one context into another and the
-// UI needs to regroup it under a new top-level bucket.
 #[tauri::command]
 fn move_session_to_workspace(
     db: State<'_, DbState>,
@@ -964,10 +884,7 @@ fn move_session_to_workspace(
     .map_err(|e| e.to_string())?;
     Ok(())
 }
-
-// Deletes all messages and the session record belonging to a chat session.
-// This is a destructive action for a conversation thread, so it removes the nested
-// message rows first and then deletes the parent session row.
+                                              
 #[tauri::command]
 fn delete_chat_session(db: State<'_, DbState>, id: String) -> Result<(), String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
@@ -977,10 +894,6 @@ fn delete_chat_session(db: State<'_, DbState>, id: String) -> Result<(), String>
         .map_err(|e| e.to_string())?;
     Ok(())
 }
-
-// Retrieves every chat message for a specific session in chronological order.
-// The frontend depends on this to rebuild the conversation history exactly as the user
-// saw it, including the natural order of turns.
 #[tauri::command]
 fn get_chats_by_session(
     db: State<'_, DbState>,
@@ -1009,10 +922,7 @@ fn get_chats_by_session(
     }
     Ok(list)
 }
-
-// Saves a new chat message and refreshes the session's updated timestamp.
-// This acts as the write path for the assistant UI and is used whenever the user or
-// model adds a new turn to an ongoing conversation.
+                                        
 #[tauri::command]
 fn save_chat(
     db: State<'_, DbState>,
@@ -1036,9 +946,6 @@ fn save_chat(
 
     Ok(())
 }
-
-// Removes all messages from a session while preserving the session metadata.
-// This is useful for clearing a conversation without deleting the thread itself.
 #[tauri::command]
 fn clear_chats_by_session(db: State<'_, DbState>, session_id: String) -> Result<(), String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
@@ -1049,9 +956,7 @@ fn clear_chats_by_session(db: State<'_, DbState>, session_id: String) -> Result<
     .map_err(|e| e.to_string())?;
     Ok(())
 }
-
-//GOALS-COMMAND
-//Fetches all goals ordered by the closest deadline.
+                                      
  #[tauri::command]
  fn get_goals(db: State<'_, DbState>) -> Result<Vec<GoalItem>, String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
@@ -1078,8 +983,6 @@ fn clear_chats_by_session(db: State<'_, DbState>, session_id: String) -> Result<
     }
     Ok(list)
  }
-
- // Creates a new goal entry in the database.
  #[tauri::command]
 fn add_goal(
     db: State<'_, DbState>,
@@ -1096,8 +999,7 @@ fn add_goal(
     .map_err(|e| e.to_string())?;
     Ok(())
 }
-
-// Updates the status of a goal and caches the AI assessment for progress tracking.
+                                                                                  
 #[tauri::command]
 fn update_goal_assessment(
     db: State<'_, DbState>,
@@ -1113,8 +1015,6 @@ fn update_goal_assessment(
     .map_err(|e| e.to_string())?;
     Ok(())
 }
-
-//Remove a Goal from the database by its identifier.
 #[tauri::command]   
 fn delete_goal(db: State<'_, DbState>, id: String) -> Result<(), String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
@@ -1122,10 +1022,6 @@ fn delete_goal(db: State<'_, DbState>, id: String) -> Result<(), String> {
         .map_err(|e| e.to_string())?;
     Ok(())
 }
-
-// -----------------------------------------------------------------------------
-// --- FLASHCARD COMMANDS ---
-// -----------------------------------------------------------------------------
 
 #[tauri::command]
 fn get_flashcard_decks(db: State<'_, DbState>) -> Result<Vec<FlashcardDeck>, String> {
@@ -1178,7 +1074,7 @@ fn rename_flashcard_deck(db: State<'_, DbState>, id: String, title: String) -> R
 }
 
 #[tauri::command]
-fn delete_flashcard_deck(db: State<'_, DbState>, id: String) -> Result<(), String> {
+fn del_deck(db: State<'_, DbState>, id: String) -> Result<(), String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
     conn.execute("DELETE FROM flashcard_decks WHERE id = ?1", params![id])
         .map_err(|e| e.to_string())?;
@@ -1222,7 +1118,7 @@ fn add_flashcards(db: State<'_, DbState>, deck_id: String, cards: Vec<Flashcard>
 }
 
 #[tauri::command]
-fn toggle_flashcard_star(db: State<'_, DbState>, id: String, is_starred: bool) -> Result<(), String> {
+fn toggle_card(db: State<'_, DbState>, id: String, is_starred: bool) -> Result<(), String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
     let starred_int = if is_starred { 1 } else { 0 };
     conn.execute(
@@ -1234,23 +1130,13 @@ fn toggle_flashcard_star(db: State<'_, DbState>, id: String, is_starred: bool) -
 }
 
 #[tauri::command]
-fn delete_flashcard(db: State<'_, DbState>, id: String) -> Result<(), String> {
+fn del_card(db: State<'_, DbState>, id: String) -> Result<(), String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
     conn.execute("DELETE FROM flashcards WHERE id = ?1", params![id])
         .map_err(|e| e.to_string())?;
     Ok(())
-}
-
-// -----------------------------------------------------------------------------
-// TASKS, NOTES, AND COURSE-ORGANIZATION HANDLERS
-// -----------------------------------------------------------------------------
-// These functions power the productivity matrix and the knowledge vault. They let the
-// frontend create, query, and delete tasks, notes, and academic subjects while keeping
-// the data in a predictable SQLite shape that the assistant can reason about later.
-
-// Returns all tasks so the task matrix can be rendered in the UI.
-// The task list is read as a complete set so the dashboard can display the four-quadrant
-// matrix without needing any additional aggregation logic.
+}                                                                       
+                                                          
 #[tauri::command]
 fn get_tasks(db: State<'_, DbState>) -> Result<Vec<TaskItem>, String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
@@ -1275,10 +1161,6 @@ fn get_tasks(db: State<'_, DbState>) -> Result<Vec<TaskItem>, String> {
     }
     Ok(tasks)
 }
-
-// Inserts a new task into the priority matrix.
-// Each added task receives a unique identifier and a quadrant value so the UI can place
-// it into the correct urgency/importance bucket immediately.
 #[tauri::command]
 fn add_task(
     db: State<'_, DbState>,
@@ -1294,9 +1176,7 @@ fn add_task(
     .map_err(|e| e.to_string())?;
     Ok(())
 }
-
-// Removes a task from the database by its identifier.
-// This is a direct delete operation that lets the UI clear completed or abandoned tasks.
+                                                                             
 #[tauri::command]
 fn delete_task(db: State<'_, DbState>, id: String) -> Result<(), String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
@@ -1304,10 +1184,6 @@ fn delete_task(db: State<'_, DbState>, id: String) -> Result<(), String> {
         .map_err(|e| e.to_string())?;
     Ok(())
 }
-
-// Returns all saved notes for the knowledge vault view.
-// Notes are retrieved as a complete collection so the frontend can display them in a
-// searchable, inspectable, and editable workspace.
 #[tauri::command]
 fn get_notes(db: State<'_, DbState>) -> Result<Vec<NoteItem>, String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
@@ -1332,10 +1208,7 @@ fn get_notes(db: State<'_, DbState>) -> Result<Vec<NoteItem>, String> {
     }
     Ok(notes)
 }
-
-// Stores a note, inserting it or updating it if it already exists.
-// This is the write pathway for the note-taking experience and uses UPSERT semantics
-// so editing a note does not create duplicate records.
+                                                   
 #[tauri::command]
 fn save_note(
     db: State<'_, DbState>,
@@ -1353,9 +1226,6 @@ fn save_note(
     .map_err(|e| e.to_string())?;
     Ok(())
 }
-
-// Deletes a note by its unique identifier.
-// This keeps the knowledge vault tidy when a note is archived or no longer relevant.
 #[tauri::command]
 fn delete_note(db: State<'_, DbState>, id: String) -> Result<(), String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
@@ -1363,9 +1233,7 @@ fn delete_note(db: State<'_, DbState>, id: String) -> Result<(), String> {
         .map_err(|e| e.to_string())?;
     Ok(())
 }
-
-// Returns all courses or subjects so the UI can display them in the study dashboard.
-// Courses act as the organizational umbrella for notes, textbooks, and related study assets.
+                                                                                      
 #[tauri::command]
 fn get_courses(db: State<'_, DbState>) -> Result<Vec<CourseItem>, String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
@@ -1391,10 +1259,6 @@ fn get_courses(db: State<'_, DbState>) -> Result<Vec<CourseItem>, String> {
     }
     Ok(courses)
 }
-
-// Creates a new course or subject entry in the study dashboard.
-// This helps the user organize notes and textbooks around academic categories such as
-// math, biology, or software engineering.
 #[tauri::command]
 fn add_course(
     db: State<'_, DbState>,
@@ -1412,9 +1276,7 @@ fn add_course(
     .map_err(|e| e.to_string())?;
     Ok(())
 }
-
-// Removes a course record and its associated study assets from the local database.
-// In practice this is a lightweight delete route that lets the UI clean up an entire subject.
+                                                                                           
 #[tauri::command]
 fn delete_course(db: State<'_, DbState>, id: String) -> Result<(), String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
@@ -1422,17 +1284,6 @@ fn delete_course(db: State<'_, DbState>, id: String) -> Result<(), String> {
         .map_err(|e| e.to_string())?;
     Ok(())
 }
-
-// -----------------------------------------------------------------------------
-// FOCUS TRACKING AND PLAYLIST MANAGEMENT HANDLERS
-// -----------------------------------------------------------------------------
-// These commands bridge the productivity and leisure features of the app. They store
-// focus-session history for the stats dashboard and keep playlist collections updated
-// so the music experience can be controlled from the same local database.
-
-// Records a completed focus session and optionally marks its linked task as done.
-// This is the write path for the focus timer experience and helps the app convert a
-// completed work block into a durable record that can be summarized later.
 #[tauri::command]
 fn log_focus_session(
     db: State<'_, DbState>,
@@ -1458,10 +1309,7 @@ fn log_focus_session(
 
     Ok(())
 }
-
-// Returns logged focus-session history for stats and productivity dashboards.
-// The UI uses this to render streaks, time spent in work blocks, and task completion
-// patterns over time.
+            
 #[tauri::command]
 fn get_focus_sessions(db: State<'_, DbState>) -> Result<Vec<FocusSessionItem>, String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
@@ -1487,9 +1335,6 @@ fn get_focus_sessions(db: State<'_, DbState>) -> Result<Vec<FocusSessionItem>, S
     }
     Ok(list)
 }
-
-// Updates the title associated with a focus session entry.
-// This lets the user attach a more descriptive name to a completed block after the fact.
 #[tauri::command]
 fn rename_focus_session(db: State<'_, DbState>, id: String, title: String) -> Result<(), String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
@@ -1500,9 +1345,7 @@ fn rename_focus_session(db: State<'_, DbState>, id: String, title: String) -> Re
     .map_err(|e| e.to_string())?;
     Ok(())
 }
-
-// Removes a single focus-session log entry from the database.
-// This is useful when a session is accidentally logged or the user wants to clean up history.
+                                                                                
 #[tauri::command]
 fn delete_focus_session(db: State<'_, DbState>, id: String) -> Result<(), String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
@@ -1510,11 +1353,6 @@ fn delete_focus_session(db: State<'_, DbState>, id: String) -> Result<(), String
         .map_err(|e| e.to_string())?;
     Ok(())
 }
-
-// --- PLAYLIST COMMANDS ---
-// Retrieves playlists and their serialized music content from storage.
-// Playlists are stored as JSON blobs inside SQLite so the frontend can work with them
-// as structured objects without needing a separate document store.
 #[tauri::command]
 fn get_playlists(db: State<'_, DbState>) -> Result<Vec<PlaylistItem>, String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
@@ -1542,9 +1380,7 @@ fn get_playlists(db: State<'_, DbState>) -> Result<Vec<PlaylistItem>, String> {
     }
     Ok(list)
 }
-
-// Creates a new playlist entry and stores its initial tag metadata.
-// This initializes the playlist record with an empty song array and a set of user-defined tags.
+                                                                                           
 #[tauri::command]
 fn create_playlist(
     db: State<'_, DbState>,
@@ -1566,10 +1402,7 @@ fn create_playlist(
     .map_err(|e| e.to_string())?;
     Ok(())
 }
-
-// Renames an existing playlist.
-// This is a straightforward metadata update that keeps the playlist's identity while
-// adjusting the human-readable label.
+                                     
 #[tauri::command]
 fn rename_playlist(db: State<'_, DbState>, id: String, name: String) -> Result<(), String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
@@ -1580,9 +1413,6 @@ fn rename_playlist(db: State<'_, DbState>, id: String, name: String) -> Result<(
     .map_err(|e| e.to_string())?;
     Ok(())
 }
-
-// Removes a playlist and its stored playlist metadata.
-// Deleting a playlist also removes the record that housed its tags and songs.
 #[tauri::command]
 fn delete_playlist(db: State<'_, DbState>, id: String) -> Result<(), String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
@@ -1590,9 +1420,7 @@ fn delete_playlist(db: State<'_, DbState>, id: String) -> Result<(), String> {
         .map_err(|e| e.to_string())?;
     Ok(())
 }
-
-// Updates the tags attached to a playlist for organization and filtering.
-// This allows the UI to classify playlists by mood, study mode, background, or favorite.
+                                                                                   
 #[tauri::command]
 fn update_playlist_tags(
     db: State<'_, DbState>,
@@ -1608,10 +1436,6 @@ fn update_playlist_tags(
     .map_err(|e| e.to_string())?;
     Ok(())
 }
-
-// Adds a music result to a playlist if it is not already present.
-// This prevents duplicate songs from appearing in the same playlist and keeps the JSON
-// payload compact and predictable.
 #[tauri::command]
 fn add_song_to_playlist(
     db: State<'_, DbState>,
@@ -1641,9 +1465,7 @@ fn add_song_to_playlist(
 
     Ok(())
 }
-
-// Removes a specific song from a playlist by matching its YouTube video id.
-// This is the delete path for playlist membership and keeps the saved JSON collection in sync.
+                                                                                           
 #[tauri::command]
 fn remove_song_from_playlist(
     db: State<'_, DbState>,
@@ -1670,18 +1492,8 @@ fn remove_song_from_playlist(
     .map_err(|e| e.to_string())?;
 
     Ok(())
-}
-
-// -----------------------------------------------------------------------------
-// YOUTUBE MUSIC AND OFFLINE AUDIO HANDLERS
-// -----------------------------------------------------------------------------
-// These commands connect the app's music experience to external media discovery and
-// the local cache of downloaded songs. They let the UI search YouTube Music, resolve
-// stream URLs, download audio into the app data directory, and later replay those files.
-
-// Queries yt-dlp for music search results and returns them as JSON text for the frontend.
-// The function shells out to yt-dlp with a special search query format so the UI receives
-// a compact list of music results that it can display in a searchable picker.
+}                                                                              
+                                                                             
 #[tauri::command]
 async fn search_yt_music(query: String) -> Result<String, String> {
     let search_query = format!("ytsearch5:{}", query);
@@ -1743,10 +1555,7 @@ async fn search_yt_music(query: String) -> Result<String, String> {
     }
     serde_json::to_string(&results).map_err(|e| e.to_string())
 }
-
-// Resolves a direct audio stream URL for a YouTube Music video id.
-// The frontend can call this to obtain a real stream source for playback or for later
-// download into the offline cache.
+                               
 #[tauri::command]
 async fn get_yt_audio_url(video_id: String) -> Result<String, String> {
     let yt_host = "music.youtube.com";
@@ -1763,11 +1572,7 @@ async fn get_yt_audio_url(video_id: String) -> Result<String, String> {
     }
     Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
 }
-
-// --- OFFLINE MUSIC & DOWNLOAD COMMANDS ---
-// Downloads a YouTube Music song to the app data directory and stores a local record.
-// This turns an online media result into a persisted, replayable asset that lives within
-// the user's local app data folder.
+                              
 #[tauri::command]
 async fn download_yt_song(
     app: tauri::AppHandle, 
@@ -1821,10 +1626,7 @@ async fn download_yt_song(
     
     Ok(new_song)
 }
-
-// Adds a local audio file to the app's offline music library.
-// This is used when the user already has a local audio asset and wants to make it
-// available inside the app's library without going through the downloader.
+                                                                      
 #[tauri::command]
 fn add_local_song(
     db: State<'_, DbState>, 
@@ -1853,10 +1655,6 @@ fn add_local_song(
     
     Ok(new_song)
 }
-
-// Returns all offline songs available to the music player.
-// The UI uses this to populate the local library and make downloaded or imported audio
-// files available for playback.
 #[tauri::command]
 fn get_offline_songs(db: State<'_, DbState>) -> Result<Vec<OfflineSongItem>, String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
@@ -1884,10 +1682,7 @@ fn get_offline_songs(db: State<'_, DbState>) -> Result<Vec<OfflineSongItem>, Str
     }
     Ok(list)
 }
-
-// Deletes an offline song record and optionally removes the backing audio file.
-// This gives the UI a way to prune items from the local library and optionally delete the
-// underlying audio file from disk as well.
+                                     
 #[tauri::command]
 fn delete_offline_song(db: State<'_, DbState>, id: String, remove_file: bool) -> Result<(), String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
@@ -1906,17 +1701,6 @@ fn delete_offline_song(db: State<'_, DbState>, id: String, remove_file: bool) ->
     conn.execute("DELETE FROM offline_songs WHERE id = ?1", params![id]).map_err(|e| e.to_string())?;
     Ok(())
 }
-
-// -----------------------------------------------------------------------------
-// TEXTBOOKS, BOOK SETS, AND CALENDAR HANDLERS
-// -----------------------------------------------------------------------------
-// These commands form the study and scheduling layer of the app. They import academic
-// materials, keep them indexed for assistant context, and persist calendar events so the
-// dashboard can present both workload and time-block information to the user.
-
-// Imports a PDF textbook, extracts its text into the database, and stores metadata.
-// This is one of the more complex persistence flows because it must read the PDF file,
-// iterate through its pages, and convert each page into a searchable row in the database.
 #[tauri::command]
 async fn import_pdf_textbook(
     db: State<'_, DbState>,
@@ -1962,10 +1746,7 @@ async fn import_pdf_textbook(
         created_at,
     })
 }
-
-// Returns all imported textbooks for display in the study dashboard.
-// This provides the UI with the metadata it needs while the assistant separately uses the
-// page-level stored content to answer questions about attached documents.
+                                                                  
 #[tauri::command]
 fn get_textbooks(db: State<'_, DbState>) -> Result<Vec<TextbookItem>, String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
@@ -1993,9 +1774,6 @@ fn get_textbooks(db: State<'_, DbState>) -> Result<Vec<TextbookItem>, String> {
     }
     Ok(list)
 }
-
-// Renames a textbook entry.
-// This updates the visible label without touching the extracted text or file metadata.
 #[tauri::command]
 fn rename_textbook(db: State<'_, DbState>, id: String, title: String) -> Result<(), String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
@@ -2006,9 +1784,7 @@ fn rename_textbook(db: State<'_, DbState>, id: String, title: String) -> Result<
     .map_err(|e| e.to_string())?;
     Ok(())
 }
-
-// Reassigns a textbook to a different course or subject.
-// This is a lightweight metadata operation that keeps the study dashboard consistent.
+                                                                                  
 #[tauri::command]
 fn update_textbook_course(db: State<'_, DbState>, id: String, course_id: String) -> Result<(), String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
@@ -2019,10 +1795,6 @@ fn update_textbook_course(db: State<'_, DbState>, id: String, course_id: String)
     .map_err(|e| e.to_string())?;
     Ok(())
 }
-
-// Deletes a textbook and all of its extracted pages and set associations.
-// The cleanup is intentionally broad so that removing an imported book does not leave
-// stale page rows or book-set links behind.
 #[tauri::command]
 fn delete_textbook(db: State<'_, DbState>, id: String) -> Result<(), String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
@@ -2031,11 +1803,7 @@ fn delete_textbook(db: State<'_, DbState>, id: String) -> Result<(), String> {
     conn.execute("DELETE FROM textbooks WHERE id = ?1", params![id]).map_err(|e| e.to_string())?;
     Ok(())
 }
-
-// --- BOOK SET MANAGEMENT COMMANDS ---
-// Returns book sets along with the textbook ids attached to each set.
-// This gives the UI an easy way to render grouped study bundles without needing to query
-// multiple tables separately for each display operation.
+                                                     
 #[tauri::command]
 fn get_book_sets(db: State<'_, DbState>) -> Result<Vec<BookSetItem>, String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
@@ -2063,9 +1831,6 @@ fn get_book_sets(db: State<'_, DbState>) -> Result<Vec<BookSetItem>, String> {
 
     Ok(sets)
 }
-
-// Creates a named collection of textbooks for grouped study workflows.
-// Book sets are a simple way to group several imported PDFs into a single study bundle.
 #[tauri::command]
 fn create_book_set(db: State<'_, DbState>, id: String, name: String) -> Result<(), String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
@@ -2076,9 +1841,7 @@ fn create_book_set(db: State<'_, DbState>, id: String, name: String) -> Result<(
     ).map_err(|e| e.to_string())?;
     Ok(())
 }
-
-// Renames a study book set.
-// This updates the displayed label while keeping the underlying set membership intact.
+                                                                            
 #[tauri::command]
 fn rename_book_set(db: State<'_, DbState>, id: String, name: String) -> Result<(), String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
@@ -2088,9 +1851,6 @@ fn rename_book_set(db: State<'_, DbState>, id: String, name: String) -> Result<(
     ).map_err(|e| e.to_string())?;
     Ok(())
 }
-
-// Removes a book set and all of its membership links.
-// This cleans up both the top-level set row and the junction rows that link it to books.
 #[tauri::command]
 fn delete_book_set(db: State<'_, DbState>, id: String) -> Result<(), String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
@@ -2098,9 +1858,7 @@ fn delete_book_set(db: State<'_, DbState>, id: String) -> Result<(), String> {
     conn.execute("DELETE FROM book_sets WHERE id = ?1", params![id]).map_err(|e| e.to_string())?;
     Ok(())
 }
-
-// Adds a textbook to a named book set.
-// This is the join operation that links a textbook to a study bundle.
+                                                                 
 #[tauri::command]
 fn add_book_to_set(db: State<'_, DbState>, set_id: String, textbook_id: String) -> Result<(), String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
@@ -2110,9 +1868,6 @@ fn add_book_to_set(db: State<'_, DbState>, set_id: String, textbook_id: String) 
     ).map_err(|e| e.to_string())?;
     Ok(())
 }
-
-// Removes a textbook from a book set.
-// This is the inverse of the add operation and keeps the link table from accumulating stale entries.
 #[tauri::command]
 fn remove_book_from_set(db: State<'_, DbState>, set_id: String, textbook_id: String) -> Result<(), String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
@@ -2122,11 +1877,7 @@ fn remove_book_from_set(db: State<'_, DbState>, set_id: String, textbook_id: Str
     ).map_err(|e| e.to_string())?;
     Ok(())
 }
-
-// --- ADVANCED CALENDAR COMMANDS ---
-// Inserts a calendar event into the local schedule database.
-// Calendar events are written as structured records so the UI can render time blocks,
-// reminders, and appointments with the correct metadata.
+                                               
 #[tauri::command]
 fn add_calendar_event(
     db: State<'_, DbState>,
@@ -2152,10 +1903,7 @@ fn add_calendar_event(
     ).map_err(|e| e.to_string())?;
     Ok(())
 }
-
-// Updates an existing calendar event with revised metadata.
-// This is the edit path for schedule changes and preserves the event's identity while
-// replacing its underlying time and description fields.
+                                                       
 #[tauri::command]
 fn update_calendar_event(
     db: State<'_, DbState>,
@@ -2182,19 +1930,13 @@ fn update_calendar_event(
     ).map_err(|e| e.to_string())?;
     Ok(())
 }
-
-// Deletes a calendar event by id.
-// This removes one scheduled item from the store without touching unrelated events.
 #[tauri::command]
 fn delete_calendar_event(db: State<'_, DbState>, id: String) -> Result<(), String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
     conn.execute("DELETE FROM calendar_events WHERE id = ?1", params![id]).map_err(|e| e.to_string())?;
     Ok(())
 }
-
-// Retrieves all events that overlap a requested time range for the UI calendar.
-// The query is intentionally range-based so the frontend can request the visible window of
-// time and receive every relevant event in a single response.
+                                                     
 #[tauri::command]
 fn get_calendar_events_in_range(db: State<'_, DbState>, start: i64, end: i64) -> Result<Vec<CalendarEventItem>, String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
@@ -2228,11 +1970,6 @@ fn get_calendar_events_in_range(db: State<'_, DbState>, start: i64, end: i64) ->
     }
     Ok(list)
 }
-
-// ==========================================
-// 4. TELEMETRY & ACTIVE WINDOW LOGIC
-// ==========================================
-// Returns the currently focused window and its metadata for telemetry and focus analysis.
 #[tauri::command]
 fn get_active_app_telemetry() -> Result<serde_json::Value, String> {
     match get_active_window() {
@@ -2258,22 +1995,11 @@ fn get_active_app_telemetry() -> Result<serde_json::Value, String> {
         })),
     }
 }
-
-// -------------------------------------------------------------------------------------------------
-// NEW: THE OBSERVER EFFECT AGGREGATION PIPELINE
-// This command executes complex SQLite mathematical heuristics, returning daily and weekly logs
-// so the frontend can natively build the Deep Work vs. Distraction graphs and the app's focus dashboard.
-// The function intentionally computes a high-level summary from the immutable telemetry table instead of
-// returning raw rows, because the UI needs a compact, predictable payload that is easy to render and reason about.
-// -------------------------------------------------------------------------------------------------
+                                                                                               
 #[tauri::command]
 fn get_telemetry_stats(db: State<'_, DbState>) -> Result<serde_json::Value, String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
-    
-    // 1. TODAY'S AGGREGATED STATS (Categorical split)
-    // This first query summarizes the current day's activity by category such as Deep Work, Research,
-    // Leisure, Distraction, and Neutral. The time values are multiplied by 10 because the telemetry loop
-    // logs one heartbeat every 10 seconds, so the UI can display the totals in a more human-friendly seconds format.
+                                                                                                            
     let mut today_stmt = conn.prepare("
         SELECT category, COUNT(*) * 10 as time_spent 
         FROM immutable_telemetry 
@@ -2286,8 +2012,7 @@ fn get_telemetry_stats(db: State<'_, DbState>) -> Result<serde_json::Value, Stri
     }).map_err(|e| e.to_string())?;
 
     let mut today_stats = serde_json::Map::new();
-    // Initialize defaults so the frontend always has keys to render, even if a category has no recorded data.
-    // This makes the charting logic simpler and prevents empty states from causing UI inconsistencies.
+                                                                                                
     today_stats.insert("Deep Work".to_string(), serde_json::json!(0));
     today_stats.insert("Research".to_string(), serde_json::json!(0));
     today_stats.insert("Leisure".to_string(), serde_json::json!(0));
@@ -2298,9 +2023,6 @@ fn get_telemetry_stats(db: State<'_, DbState>) -> Result<serde_json::Value, Stri
         today_stats.insert(item.0, serde_json::json!(item.1));
     }
 
-    // 2. TODAY'S TOP APPS (For the granular breakdown)
-    // This section builds the detail view for the dashboard by identifying which applications dominated the day's activity.
-    // It groups rows by application name and category so the frontend can highlight the biggest contributors to focus or distraction.
     let mut apps_stmt = conn.prepare("
         SELECT app_name, category, COUNT(*) * 10 as time_spent
         FROM immutable_telemetry
@@ -2322,13 +2044,9 @@ fn get_telemetry_stats(db: State<'_, DbState>) -> Result<serde_json::Value, Stri
     for item in apps_iter.flatten() {
         top_apps.push(item);
     }
-
-    // 3. HISTORICAL STATS (Last 7 Days Rolling Window)
-    // The historical portion creates a rolling window of the past seven days so the UI can visualize
-    // how the user's work habits changed over time. The query groups activity by calendar date and category,
-    // producing a compact trend dataset that can be rendered as a line or bar chart.
+                                                                           
     let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as i64;
-    let seven_days_ago = now - (7 * 86_400_000); // 7 days in milliseconds
+    let seven_days_ago = now - (7 * 86_400_000);                         
 
     let mut hist_stmt = conn.prepare("
         SELECT 
@@ -2370,23 +2088,14 @@ fn get_telemetry_stats(db: State<'_, DbState>) -> Result<serde_json::Value, Stri
     }
 
     let historical_array: Vec<serde_json::Value> = hist_map.into_values().map(serde_json::Value::Object).collect();
-
-    // 4. RETURN ENCAPSULATED JSON PAYLOAD
-    // The final payload is intentionally shaped as a small JSON object with three top-level sections:
-    // today's totals, the historical trend array, and the top application breakdown.
-    // This keeps the frontend contract simple while still exposing all of the analytics the dashboard needs.
+                                                                                              
     Ok(serde_json::json!({
         "today": today_stats,
         "historical": historical_array,
         "top_apps": top_apps
     }))
 }
-
-
-// ==========================================
-// 5. AUDIO ENGINE (PIPER TTS)
-// ==========================================
-// Sends text to the local Piper TTS engine and queues the generated audio for playback.
+                                                                                  
 #[tauri::command]
 fn read_aloud(
     state: State<'_, AudioState>,
@@ -2467,8 +2176,6 @@ fn read_aloud(
 
     Ok(())
 }
-
-// Stops the currently playing audio output.
 #[tauri::command]
 fn stop_reading(state: State<'_, AudioState>) -> Result<(), String> {
     if let Ok(tx) = state.inner().0.lock() {
@@ -2476,11 +2183,7 @@ fn stop_reading(state: State<'_, AudioState>) -> Result<(), String> {
     }
     Ok(())
 }
-
-// ==========================================
-// 6. AI CONFIGURATION & 10 DIVERSE PERSONALITIES
-// ==========================================
-// Maps a selected model tier to the backing Ollama model name and context window size.
+                                                                               
 fn get_model_config(tier: &str) -> (&'static str, usize) {
     match tier {
         "General" => ("llama3.2:3b", 16384),
@@ -2491,8 +2194,6 @@ fn get_model_config(tier: &str) -> (&'static str, usize) {
         _ => ("llama3.2:3b", 16384),
     }
 }
-
-// Returns the persona prompt that shapes the assistant's voice and behavior.
 fn get_system_prompt(persona: &str) -> &'static str {
     match persona {
         "Victor" => "You are Victor (Strict Male). You are a tactical, drill-sergeant style executive mentor. You speak with high precision, direct tone, and zero fluff. You demand accountability and action. Use your access to the user's local database context to push them toward completing tasks and mastering notes. Format responses with clean Markdown and structured bullet points.",
@@ -2508,11 +2209,6 @@ fn get_system_prompt(persona: &str) -> &'static str {
         _ => "You are an intelligent AI assistant integrated with the user's local database. Answer queries directly using the context provided.",
     }
 }
-
-// ==========================================
-// 7. TAURI COMMANDS (OLLAMA & STATS)
-// ==========================================
-// Tells Ollama to release the selected model from memory to free VRAM.
 #[tauri::command]
 async fn flush_vram(model_tier: String) -> Result<(), String> {
     let (actual_model, _) = get_model_config(&model_tier);
@@ -2533,8 +2229,6 @@ async fn flush_vram(model_tier: String) -> Result<(), String> {
 
     Ok(())
 }
-
-// Reports current system memory usage for the dashboard statistics panel.
 #[tauri::command]
 fn get_telemetry() -> Result<serde_json::Value, String> {
     let mut sys = System::new_all();
@@ -2558,8 +2252,6 @@ fn get_telemetry() -> Result<serde_json::Value, String> {
         "ram_percent": percent
     }))
 }
-
-// Performs a lightweight web search and returns a short snippet summary for the LLM context.
 fn fetch_web_snippets(query: &str) -> String {
     let ddg_host = "lite.duckduckgo.com";
     let search_url = format!("https://{}/lite/", ddg_host);
@@ -2587,12 +2279,7 @@ fn fetch_web_snippets(query: &str) -> String {
 
     String::from("\n(Web search yielded no immediate results.)\n")
 }
-
-// Main bridge between the frontend and the local Ollama model, injecting database context and tool instructions.
-// This function is the heart of the assistant experience: it gathers the user's latest prompt, appends the
-// local knowledge base and optional textbook context, and sends everything to the local Ollama backend.
-// It also parses any action tags returned by the model and translates them into real database mutations such as
-// creating tasks, adding calendar events, or marking tasks as complete.
+                                                                   
 #[tauri::command]
 async fn ask_ollama(
     db: State<'_, DbState>,
@@ -2605,19 +2292,13 @@ async fn ask_ollama(
     _current_epoch_ms: i64,
     start_of_today_ms: i64,
 ) -> Result<String, String> {
-    // Resolve the selected model tier into its concrete Ollama model identifier and a safe context window size.
     let (actual_model, safe_context) = get_model_config(&model_tier);
-
-    // Extract the latest user message from the frontend message history so it can be used as the primary prompt.
     let user_prompt = messages.last()
         .and_then(|m| m.get("content"))
         .and_then(|c| c.as_str())
         .unwrap_or("")
         .to_string();
-
-    // Build the rich context payload that will be shipped to the model.
-    // The context is constructed from the local database so the assistant can reason about the user's tasks,
-    // notes, course structure, calendar, and telemetry history rather than only seeing the latest chat message.
+                                                                                                               
     let mut db_context = {
         let conn = db.0.lock().map_err(|e| e.to_string())?;
         
@@ -2629,9 +2310,7 @@ async fn ask_ollama(
         }
         ctx
     };
-
-    // Optionally enrich the prompt with live web snippets when the user requests web-aware responses.
-    // This is a lightweight search pass that adds a little external context without replacing the local database context.
+                                                                                                                 
     if search_web {
         if !user_prompt.is_empty() {
             println!("[WEB SEARCH] Fetching live web context for: {}", user_prompt);
@@ -2680,28 +2359,22 @@ You may only use ONE tag per response.
         messages.len(),
         search_web
     );
-
-    // Open a separate database connection for the background worker thread.
-    // This avoids sharing a connection across asynchronous boundaries while still allowing the parser to mutate the database.
+                                                                                                                         
     let conn_for_thread = Connection::open("omni_core.db").unwrap(); 
-
-    // Offload the actual Ollama request and parsing work to a blocking thread so it does not block the Tauri event loop.
+                                                                                                                   
     let thread_result = tauri::async_runtime::spawn_blocking(move || -> Result<String, String> {
         let ollama_host = "127.0.0.1:11434";
         let chat_url = format!("http://{}/api/chat", ollama_host);
-        // Combine the persona-specific system prompt, the local database context, and the action instruction block.
-        // This gives the model both behavioral guidance and a rich knowledge base tailored to the user's workspace.
+                                                                                                             
         let full_system_prompt = format!("{}\n{}\n{}", get_system_prompt(&persona), db_context, tool_instructions);
-
-        // Build the final message array for Ollama. The system prompt is prepended first, followed by the conversation history.
+                                                                                                                      
         let mut ollama_messages = vec![serde_json::json!({
             "role": "system",
             "content": full_system_prompt
         })];
 
         ollama_messages.extend(messages);
-
-        // Assemble the request body for Ollama using the selected model, message history, and context window size.
+                                                                                                       
         let body = serde_json::json!({
             "model": actual_model,
             "messages": ollama_messages,
@@ -2735,19 +2408,12 @@ You may only use ONE tag per response.
                 err.as_str().unwrap_or("Unknown error")
             ));
         }
-
-        // Extract the text response from Ollama's structured reply.
+                                                           
         let response_text = json_response["message"]["content"]
             .as_str()
             .unwrap_or("No response")
             .to_string();
-
-        // -------------------------------------------------------------
-        // ADVANCED MULTI-TAG PARSER
-        // -------------------------------------------------------------
-        // The model may emit action tags such as [ACT:TASK:1:Finish work].
-        // These are parsed here and translated into concrete local mutations so the assistant can act on the user's data.
-        // The parser strips the tag out of the visible response text and appends a short system-action note summarizing what happened.
+                                                                                                                          
         let mut tool_results = Vec::new();
         let mut clean_text = String::new();
         let mut current_text = response_text.as_str();
@@ -2757,8 +2423,7 @@ You may only use ONE tag per response.
             
             if let Some(end_idx) = current_text[start_idx..].find(']') {
                 let tag = &current_text[start_idx + 5..start_idx + end_idx];
-                
-                // Strip out quotes, backticks, and spaces
+                                                         
                 let parts: Vec<String> = tag.split(':')
                     .map(|s| s.trim().trim_matches(|c| c == '"' || c == '\'' || c == '`').to_string())
                     .collect();
@@ -2781,9 +2446,7 @@ You may only use ONE tag per response.
                         } else {
                             "New Task".to_string()
                         };
-                        
-                        // Safety sleep to ensure unique DB ID generation.
-                        // This is a small guard against timestamp collisions when multiple actions are created in quick succession.
+                                                                                                                 
                         std::thread::sleep(std::time::Duration::from_millis(2));
                         let id = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis().to_string();
                         
@@ -2820,9 +2483,7 @@ You may only use ONE tag per response.
 
                         let (start_h, start_m) = parse_time(&start_hour_str, &start_min_str);
                         let (mut end_h, end_m) = parse_time(&end_hour_str, &end_min_str);
-                        
-                        // AI Safety: If the end hour is before the start hour, the model likely intended the end time to be in the afternoon.
-                        // A corrective adjustment keeps calendar scheduling intuitive and avoids obviously invalid blocks.
+                                                                                                  
                         if end_h < start_h {
                             end_h += 12; 
                         }
@@ -2837,9 +2498,7 @@ You may only use ONE tag per response.
                         
                         let start = start_of_today_ms + (days * 86_400_000) + (start_h * 3_600_000) + (start_m * 60_000);
                         let mut end = start_of_today_ms + (days * 86_400_000) + (end_h * 3_600_000) + (end_m * 60_000);
-                        
-                        // Failsafe: Ensure the block is at least one hour long if the parsed times somehow collapse to an invalid range.
-                        // This prevents zero-length or backwards events from being inserted into the calendar.
+                                                                                      
                         if end <= start {
                             end = start + 3_600_000;
                         }
@@ -2890,13 +2549,10 @@ You may only use ONE tag per response.
                 current_text = &current_text[start_idx + 5..];
             }
         }
-        clean_text.push_str(current_text);
-        
-        // Remove any markdown code fences around the text so the final response is clean and presentation-friendly.
+        clean_text.push_str(current_text);        
+                                                                                                                   
         let mut final_response = clean_text.replace("```json", "").replace("```", "").trim().to_string();
-        
-        // Append the system action notes after the main response text so the user sees both the conversational answer and the resulting backend action.
-        
+
         for res in tool_results {
             final_response.push_str(&format!("\n\n*System Action:* _{}_", res));
         }
@@ -2908,19 +2564,13 @@ You may only use ONE tag per response.
 
     thread_result
 }
-
-// ==========================================
-// 8. MAIN DAEMON SETUP
-// ==========================================
-// Application entry point that initializes the database, launches the audio system, and registers Tauri commands.
+                                                                                                         
 fn main() {
-    // Initialize the database schema and create the shared connection that the app will use.
+                                                                                            
     let db_conn = init_db().expect("Failed to initialize SQLite database");
-
-    // Create a channel that lets the UI and backend control audio playback from any thread.
+                                                                                           
     let (audio_tx, audio_rx) = mpsc::channel::<AudioCommand>();
-
-    // Launch the background audio worker that plays incoming sound requests through Rodio.
+                                                                                          
     thread::spawn(move || match rodio::OutputStream::try_default() {
         Ok((_stream, stream_handle)) => {
             if let Ok(mut sink) = rodio::Sink::try_new(&stream_handle) {
@@ -2973,11 +2623,9 @@ fn main() {
                     _ => {}
                 })
                 .build(app)?;
-
-            // --- THE SILENT WATCHER BACKGROUND LOOP ---
-            // Start a background task that periodically records the active window for telemetry and focus analysis.
+                                                                                                     
             tauri::async_runtime::spawn(async move {
-                // We create a completely separate DB connection inside the thread so it doesn't lock the main app
+                                                                                                                 
                 if let Ok(conn) = Connection::open("omni_core.db") {
                     loop {
                         let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as i64;
@@ -2986,7 +2634,7 @@ fn main() {
                             let app_name = window.app_name.to_lowercase();
                             let title = window.title.to_lowercase();
                             
-                            // Basic categorization logic (can be expanded later)
+                                                                                
                             let category = if app_name.contains("code") || app_name.contains("cursor") || title.contains("omni-core") || app_name.contains("terminal") {
                                 "Deep Work"
                             } else if app_name.contains("chrome") || app_name.contains("edge") || app_name.contains("brave") || app_name.contains("opera") || app_name.contains("firefox") || app_name.contains("vivaldi") || app_name.contains("safari") || app_name.contains("chromium") {
@@ -3007,8 +2655,7 @@ fn main() {
                                 params![id, now, window.app_name, window.title, category],
                             );
                         }
-                        
-                        // Polling rate for telemetry (every 10 seconds)
+                                                                                              
                         tokio::time::sleep(Duration::from_secs(10)).await;
                     }
                 }
@@ -3016,7 +2663,7 @@ fn main() {
 
             Ok(())
         })
-        // Clean up background model state when the main window is closing.
+                                                                          
         .on_window_event(|_window, event| match event {
             tauri::WindowEvent::CloseRequested { .. } => {
                 let models_to_purge = [
@@ -3034,7 +2681,7 @@ fn main() {
             }
             _ => {}
         })
-        // Register all backend commands that the frontend can invoke over Tauri.
+                                                                                
         .invoke_handler(tauri::generate_handler![
             get_telemetry_stats,
             get_telemetry, 
@@ -3105,11 +2752,11 @@ fn main() {
             get_flashcard_decks,
             create_flashcard_deck,
             rename_flashcard_deck,
-            delete_flashcard_deck,
+            del_deck,
             get_flashcards,
             add_flashcards,
-            toggle_flashcard_star,
-            delete_flashcard,
+            toggle_card,
+            del_card,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

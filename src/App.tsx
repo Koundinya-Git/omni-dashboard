@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+﻿import React, { useState, useEffect, useRef } from 'react';
 import { invoke, convertFileSrc } from '@tauri-apps/api/core';
 import { isPermissionGranted, requestPermission, sendNotification } from '@tauri-apps/plugin-notification';
 import { open } from '@tauri-apps/plugin-dialog';
@@ -20,8 +20,6 @@ import {
   AlertTriangle, Library, FileUp, Clock, Users, Palmtree, AlertCircle, ChevronLeft, MapPin, AlignLeft,
   BarChart3, Brain, Info, Star
 } from 'lucide-react';
-
-// --- TYPESCRIPT INTERFACES ---
 interface SystemStats { ram_total: string; ram_used: string; ram_percent: number; }
 interface ChatMessage { role: 'user' | 'ai'; content: string; isError?: boolean; }
 interface DbChatMessage { id: string; session_id: string; role: string; content: string; timestamp: number; }
@@ -58,12 +56,8 @@ interface FlashcardDeck {
 interface Flashcard {
   id: string; deck_id: string; front: string; back: string; is_starred: boolean; next_review: number;
 }
-
-// --- NEW TELEMETRY INTERFACES ---
 interface TopApp { app_name: string; category: string; time_spent: number; }
 interface TelemetryStats { today: Record<string, number>; historical: any[]; top_apps: TopApp[]; }
-
-// --- CONSTANTS ---
 const QUOTES = [
   "Discipline equals freedom.", "What gets measured gets managed.", "Do not stop when you are tired. Stop when you are done.",
   "Focus is a matter of deciding what things you're not going to do.", "Amateurs sit and wait for inspiration, the rest of us just get up and go to work.",
@@ -72,16 +66,16 @@ const QUOTES = [
 ];
 
 const PERSONALITIES = [
-  { name: "Victor", emoji: "🪖", description: "Strict tactical executive mentor." },
-  { name: "Morgan", emoji: "🖋️", description: "Razor-sharp, high-standard professor." },
-  { name: "Sam", emoji: "🍕", description: "Friendly, chill down-to-earth roommate." },
-  { name: "Maya", emoji: "🌻", description: "Warm, articulate, encouraging mentor." },
-  { name: "Leo", emoji: "☕", description: "Deadpan, sarcastic software developer." },
-  { name: "Felix", emoji: "🚀", description: "Hyper-energetic chaos tech tinkerer." },
-  { name: "Ziggy", emoji: "📻", description: "Smooth surrealist late-night philosopher." },
-  { name: "Nova", emoji: "✨", description: "Fast-talking chaos hype-woman." },
-  { name: "Aria", emoji: "🧪", description: "Eccentric theatrical mad scientist." },
-  { name: "Chloe", emoji: "💅", description: "Dry-witted, zero-filter big sister." }
+  { name: "Victor", emoji: "ðŸª–", description: "Strict tactical executive mentor." },
+  { name: "Morgan", emoji: "ðŸ–‹ï¸", description: "Razor-sharp, high-standard professor." },
+  { name: "Sam", emoji: "ðŸ•", description: "Friendly, chill down-to-earth roommate." },
+  { name: "Maya", emoji: "ðŸŒ»", description: "Warm, articulate, encouraging mentor." },
+  { name: "Leo", emoji: "â˜•", description: "Deadpan, sarcastic software developer." },
+  { name: "Felix", emoji: "ðŸš€", description: "Hyper-energetic chaos tech tinkerer." },
+  { name: "Ziggy", emoji: "ðŸ“»", description: "Smooth surrealist late-night philosopher." },
+  { name: "Nova", emoji: "âœ¨", description: "Fast-talking chaos hype-woman." },
+  { name: "Aria", emoji: "ðŸ§ª", description: "Eccentric theatrical mad scientist." },
+  { name: "Chloe", emoji: "ðŸ’…", description: "Dry-witted, zero-filter big sister." }
 ];
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -507,8 +501,6 @@ export default function App() {
         await fetchGoals();
     } catch (e) { console.error("Goal Analysis Error:", e); } finally { setIsAnalyzingGoal(null); }
   };
-
-  // --- AUTO FLASHCARD HANDLERS ---
   const fetchFlashcardDecks = async () => { try { setFlashcardDecks(await invoke<FlashcardDeck[]>('get_flashcard_decks')); } catch (e) { console.error(e); } };
   const fetchFlashcards = async (deckId: string) => { try { setActiveFlashcards(await invoke<Flashcard[]>('get_flashcards', { deckId })); } catch (e) { console.error(e); } };
 
@@ -516,7 +508,6 @@ export default function App() {
     setIsGeneratingFlashcards(true);
     setActiveTab('flashcards');
     try {
-      // 1. Much more aggressive prompt to force strict JSON compliance
       let finalPrompt = `SYSTEM DIRECTIVE: You are a raw data extraction pipeline. You must return ONLY a valid JSON array. DO NOT include conversational text, introductions, or explanations. DO NOT wrap the array in a JSON object. \n\nEXPECTED FORMAT EXACTLY:\n[\n  {\n    "front": "Concept or Question",\n    "back": "Detailed Definition or Answer"\n  }\n]\n\n`;
       
       let attachedTextbook = null; 
@@ -551,8 +542,6 @@ export default function App() {
       });
       
       console.log("Raw LLM Flashcard Response:", response);
-      
-      // 2. More robust JSON extraction
       let jsonStr = ""; 
       const startArr = response.indexOf('['); 
       const endArr = response.lastIndexOf(']');
@@ -599,12 +588,10 @@ export default function App() {
   };
 
   const handleDeleteDeck = async (id: string) => { if (!await showConfirm("Delete Deck", "Are you sure you want to permanently delete this deck and all its flashcards?")) return; try { await invoke('delete_flashcard_deck', { id }); if (activeDeck?.id === id) setActiveDeck(null); await fetchFlashcardDecks(); } catch(e) { console.error(e); } };
-  const handleToggleFlashcardStar = async (card: Flashcard) => { try { await invoke('toggle_flashcard_star', { id: card.id, isStarred: !card.is_starred }); if (activeDeck) fetchFlashcards(activeDeck.id); } catch(e) { console.error(e); } };
-  const handleDeleteFlashcard = async (id: string) => { try { await invoke('delete_flashcard', { id }); if (activeDeck) fetchFlashcards(activeDeck.id); } catch(e) { console.error(e); } };
+  const handleToggleFlashcardStar = async (card: Flashcard) => { try { await invoke('toggle_card', { id: card.id, isStarred: !card.is_starred }); if (activeDeck) fetchFlashcards(activeDeck.id); } catch(e) { console.error(e); } };
+  const handleDeleteFlashcard = async (id: string) => { try { await invoke('del_card', { id }); if (activeDeck) fetchFlashcards(activeDeck.id); } catch(e) { console.error(e); } };
 
   const getEventTypeIcon = (type: string, className: string = "w-4 h-4") => { switch(type) { case 'TimeBlock': return <Layers className={className} />; case 'Meeting': return <Users className={className} />; case 'Holiday': return <Palmtree className={className} />; case 'Deadline': return <AlertCircle className={className} />; default: return <MapPin className={className} />; } };
-
-  // --- CHAT EFFECTS & LOGIC ---
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [chatHistory, isTyping]);
   useEffect(() => { const flushMemory = async () => { try { await invoke('flush_vram', { modelTier: selectedTier }); } catch (e) { console.error(e); } }; flushMemory(); }, [selectedTier]);
 
@@ -879,7 +866,7 @@ export default function App() {
                         <img onClick={() => playSongDirectly(song)} src={song.thumbnails[0]?.url} alt="cover" className="w-12 h-12 rounded object-cover border border-gray-700 cursor-pointer hover:opacity-80 transition-opacity" />
                         <div onClick={() => playSongDirectly(song)} className="flex-1 min-w-0 cursor-pointer">
                           <p className="text-sm font-medium text-gray-200 truncate group-hover:text-emerald-400 transition-colors">{song.title}</p>
-                          <p className="text-xs text-gray-500 truncate">{song.artists.map(a => a.name).join(', ')} • {song.duration}</p>
+                          <p className="text-xs text-gray-500 truncate">{song.artists.map(a => a.name).join(', ')} â€¢ {song.duration}</p>
                         </div>
                         <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity shrink-0 bg-[#171717] rounded-lg border border-gray-700 p-0.5">
                            <button onClick={() => handleDownloadYTSong(song)} disabled={isDownloading[song.videoId] || isDownloaded} className="p-1.5 text-gray-400 hover:text-emerald-400 rounded transition-colors disabled:opacity-30 disabled:text-emerald-500 disabled:cursor-not-allowed">
@@ -939,7 +926,7 @@ export default function App() {
                         <h1 className="text-3xl font-bold text-gray-100 tracking-tight mb-1">Welcome to Omni-Core.</h1>
                         <p className="text-sm text-gray-400">System optimized. Ready to initiate protocol.</p>
                       </div>
-                      <div className="text-[10px] text-gray-600 font-mono text-right hidden sm:block">Omni-Core © 2026 Koundinya Gajulapalli.<br/>Licensed under GPL v3.</div>
+                      <div className="text-[10px] text-gray-600 font-mono text-right hidden sm:block">Omni-Core Â© 2026 Koundinya Gajulapalli.<br/>Licensed under GPL v3.</div>
                     </div>
                     <div className="relative flex items-center bg-[#171717] rounded-xl border border-gray-800 focus-within:border-emerald-500/50 transition-colors shadow-lg">
                       <div className="p-3 ml-2 text-emerald-500"><BrainCircuit className="w-5 h-5" /></div>
@@ -2168,7 +2155,7 @@ export default function App() {
                               </table>
                           </div>
                       </div>
-                      <div className="text-center text-[10px] text-gray-600 font-mono pb-8">Omni-Core © 2026 Koundinya Gajulapalli. Licensed under GPL v3.</div>
+                      <div className="text-center text-[10px] text-gray-600 font-mono pb-8">Omni-Core Â© 2026 Koundinya Gajulapalli. Licensed under GPL v3.</div>
                   </div>
               )}
             </div>
@@ -2211,7 +2198,7 @@ export default function App() {
                  </div>
                  
                  <div className="mt-12 text-center text-xs text-gray-500 font-mono pt-6 border-t border-gray-800 pb-12">
-                    Copyright © 2026 Koundinya Gajulapalli.<br/>Licensed under GNU General Public License v3 (GPLv3).
+                    Copyright Â© 2026 Koundinya Gajulapalli.<br/>Licensed under GNU General Public License v3 (GPLv3).
                  </div>
               </div>
             </div>
@@ -2548,7 +2535,7 @@ export default function App() {
             </div>
 
             <div className="p-4 border-t border-gray-800 bg-[#171717] flex justify-between items-center">
-              <span className="text-[10px] text-gray-500 font-mono ml-2">© 2026 Koundinya Gajulapalli (GPL v3)</span>
+              <span className="text-[10px] text-gray-500 font-mono ml-2">Â© 2026 Koundinya Gajulapalli (GPL v3)</span>
               <div className="flex gap-3">
                  <button 
                    onClick={() => setIsSettingsOpen(false)} 
