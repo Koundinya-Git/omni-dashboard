@@ -3,7 +3,7 @@ name = "omni-dashboard"
 version = "0.1.0"
 description = "A Student Assistant"
 authors = ["KoundinyaG"]
-edition = "2024"
+edition = "2021"
 
 [build-dependencies]
 tauri-build = { version = "2.0.0", features = [] }

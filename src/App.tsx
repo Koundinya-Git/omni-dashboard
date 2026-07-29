@@ -187,6 +187,10 @@ export default function App() {
   const [studyIndex, setStudyIndex] = useState(0);
   const [isCardFlipped, setIsCardFlipped] = useState(false);
   const [customDeckPrompt, setCustomDeckPrompt] = useState("");
+  const [transcriptInput, setTranscriptInput] = useState('');
+  const [summaryOutput, setSummaryOutput] = useState('');
+  const [isSummarizing, setIsSummarizing] = useState(false);
+  const [isScheduling, setIsScheduling] = useState(false);
 
   useEffect(() => {
     fetchTasks(); fetchNotes(); fetchCourses(); loadWorkspacesAndSessions();
@@ -504,6 +508,61 @@ export default function App() {
   const fetchFlashcardDecks = async () => { try { setFlashcardDecks(await invoke<FlashcardDeck[]>('get_flashcard_decks')); } catch (e) { console.error(e); } };
   const fetchFlashcards = async (deckId: string) => { try { setActiveFlashcards(await invoke<Flashcard[]>('get_flashcards', { deckId })); } catch (e) { console.error(e); } };
 
+  const handleGenerateSummary = async () => {
+    if (!transcriptInput.trim()) return;
+    setIsSummarizing(true);
+    try {
+      const prompt = `SYSTEM DIRECTIVE: You are an executive assistant. Summarize the following meeting or lecture transcript. Provide a brief overview, a structured list of core concepts, and a bulleted list of Action Items.\n\nTRANSCRIPT:\n${transcriptInput}`;
+      const response = await invoke<string>('ask_ollama', {
+        messages: [{ role: 'user', content: prompt }],
+        persona: selectedPersona.name,
+        modelTier: selectedTier,
+        searchWeb: false,
+        attachedTextbook: null,
+        currentDateStr: new Date().toLocaleString(),
+        currentEpochMs: Date.now(),
+        startOfTodayMs: new Date().setHours(0,0,0,0)
+      });
+      // Strip out any action tags just in case
+      setSummaryOutput(response.replace(/\[ACT:.*?\]/g, '').trim());
+    } catch (e: any) {
+      console.error(e);
+      alert("Summarization failed: " + e.message);
+    } finally {
+      setIsSummarizing(false);
+    }
+  };
+
+  const handleAutoSchedule = async () => {
+    setIsScheduling(true);
+    try {
+      const pending = tasks.filter(t => !t.completed);
+      if (pending.length === 0) return alert("Your matrix is empty! Add tasks first.");
+      
+      const taskList = pending.map(t => `[Q${t.quadrant}] ${t.title}`).join('\n');
+      const prompt = `Look at my pending tasks:\n${taskList}\n\nAutomatically schedule the 3 highest priority tasks (Prioritize Q1 and Q2) into 1-hour time blocks for today. Start scheduling from the current hour. YOU MUST use the [ACT:CALENDAR] tags to execute this. Do not ask for permission.`;
+      
+      await invoke<string>('ask_ollama', {
+        messages: [{ role: 'user', content: prompt }],
+        persona: "Victor", // Force Victor so it's strict and executes the tags
+        modelTier: selectedTier,
+        searchWeb: false,
+        attachedTextbook: null,
+        currentDateStr: new Date().toLocaleString(),
+        currentEpochMs: Date.now(),
+        startOfTodayMs: new Date().setHours(0,0,0,0)
+      });
+      
+      await loadCalendarEvents();
+      setActiveTab('calendar'); // Jump to the calendar to see the magic
+    } catch (e: any) {
+      console.error(e);
+      alert("Scheduling failed: " + e.message);
+    } finally {
+      setIsScheduling(false);
+    }
+  };
+
   const handleGenerateFlashcards = async (sourceType: 'Textbook' | 'Note' | 'LiveContext' | 'Custom', sourceId: string, customPrompt: string) => {
     setIsGeneratingFlashcards(true);
     setActiveTab('flashcards');
@@ -587,7 +646,7 @@ export default function App() {
     }
   };
 
-  const handleDeleteDeck = async (id: string) => { if (!await showConfirm("Delete Deck", "Are you sure you want to permanently delete this deck and all its flashcards?")) return; try { await invoke('delete_flashcard_deck', { id }); if (activeDeck?.id === id) setActiveDeck(null); await fetchFlashcardDecks(); } catch(e) { console.error(e); } };
+  const handleDeleteDeck = async (id: string) => { if (!await showConfirm("Delete Deck", "Are you sure you want to permanently delete this deck and all its flashcards?")) return; try { await invoke('del_deck', { id }); if (activeDeck?.id === id) setActiveDeck(null); await fetchFlashcardDecks(); } catch(e) { console.error(e); } };
   const handleToggleFlashcardStar = async (card: Flashcard) => { try { await invoke('toggle_card', { id: card.id, isStarred: !card.is_starred }); if (activeDeck) fetchFlashcards(activeDeck.id); } catch(e) { console.error(e); } };
   const handleDeleteFlashcard = async (id: string) => { try { await invoke('del_card', { id }); if (activeDeck) fetchFlashcards(activeDeck.id); } catch(e) { console.error(e); } };
 
@@ -1918,17 +1977,23 @@ export default function App() {
                          <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
                                 {activeFlashcards.map((card, idx) => (
-                                    <div key={card.id} className="bg-[#171717] border border-gray-800 rounded-2xl p-5 flex flex-col relative group hover:border-gray-600 transition-colors min-h-[200px]">
-                                        <div className="flex justify-between items-start mb-3 border-b border-gray-800 pb-3">
-                                            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Card {idx + 1}</span>
+                                    <div key={card.id} className="bg-[#171717] border border-gray-800 rounded-2xl p-5 flex flex-col relative group hover:border-gray-600 transition-colors min-h-[120px] justify-between">
+                                        <div className="flex justify-between items-center mb-2">
+                                            <div className="flex items-center gap-3">
+                                                <div className="flex items-center justify-center w-8 h-8 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 font-bold text-sm">
+                                                    {idx + 1}
+                                                </div>
+                                                <span className="text-lg font-semibold text-gray-200">
+                                                    Card {idx + 1}
+                                                </span>
+                                            </div>
                                             <div className="flex items-center gap-1">
                                                 <button onClick={() => handleToggleFlashcardStar(card)} className={`p-1.5 rounded transition-colors ${card.is_starred ? 'text-yellow-400' : 'text-gray-600 hover:text-gray-400'}`}><Star className={`w-4 h-4 ${card.is_starred ? 'fill-current' : ''}`}/></button>
                                                 <button onClick={() => handleDeleteFlashcard(card.id)} className="opacity-0 group-hover:opacity-100 p-1.5 text-gray-600 hover:text-red-400 transition-opacity"><Trash2 className="w-4 h-4"/></button>
                                             </div>
                                         </div>
-                                        <div className="flex-1 flex flex-col justify-center">
-                                            <p className="text-sm font-bold text-gray-200 text-center mb-4 line-clamp-3">{card.front}</p>
-                                            <p className="text-xs text-gray-500 text-center line-clamp-4 bg-[#212121] p-3 rounded-xl border border-gray-800">{card.back}</p>
+                                        <div className="text-xs text-gray-500 flex items-center gap-1.5 mt-2 pt-3 border-t border-gray-800/50">
+                                            <BrainCircuit className="w-3.5 h-3.5" /> Content Hidden (Focus Mode Only)
                                         </div>
                                     </div>
                                 ))}
@@ -2270,13 +2335,102 @@ export default function App() {
             </div>
           )}
 
-          {/* RESTORED WIP TABS */}
-          {['timetable', 'summaries'].includes(activeTab) && (
-            <div className="flex-1 flex flex-col items-center justify-center text-gray-500 p-8 text-center">
-              <Activity className="w-12 h-12 mb-4 opacity-50" />
-              <h2 className="text-2xl font-mono mb-2 uppercase tracking-widest text-gray-400">{activeTab} Module</h2>
-              <p className="text-sm">This UI component is currently marked as W.I.P.</p>
-              <p className="text-xs mt-2 opacity-70">Awaiting detailed implementation phase.</p>
+          {/* AI SCHEDULER (TIMETABLE) */}
+          {activeTab === 'timetable' && (
+            <div className="flex-1 overflow-y-auto custom-scrollbar bg-[#1a1a1a] p-8">
+              <div className="max-w-4xl mx-auto flex flex-col h-full items-center justify-center animate-in fade-in duration-500">
+                <div className="w-24 h-24 bg-emerald-500/10 rounded-full flex items-center justify-center mb-6 border border-emerald-500/20">
+                  <Layers className="w-12 h-12 text-emerald-500" />
+                </div>
+                <h1 className="text-4xl font-bold text-white mb-4 tracking-tight">Auto-Scheduler</h1>
+                <p className="text-gray-400 text-center max-w-lg mb-10 leading-relaxed">
+                  Omni-Core will analyze your Eisenhower Priority Matrix and automatically time-block your remaining day. High-priority tasks (Q1 & Q2) are handled first.
+                </p>
+
+                <div className="bg-[#171717] border border-gray-800 p-6 rounded-2xl w-full max-w-md shadow-2xl relative overflow-hidden">
+                  <div className="flex justify-between items-center mb-4">
+                    <span className="text-sm font-bold text-gray-400 uppercase tracking-wider">Pending Load</span>
+                    <span className="text-emerald-400 font-mono font-bold">{tasks.filter(t => !t.completed).length} Tasks</span>
+                  </div>
+                  
+                  <button 
+                    onClick={handleAutoSchedule} 
+                    disabled={isScheduling || tasks.filter(t => !t.completed).length === 0}
+                    className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-4 rounded-xl shadow-lg shadow-emerald-900/20 transition-all disabled:opacity-50 flex items-center justify-center gap-3"
+                  >
+                    {isScheduling ? <Activity className="w-5 h-5 animate-spin"/> : <BrainCircuit className="w-5 h-5"/>}
+                    {isScheduling ? "Generating Time-Blocks..." : "Optimize My Day"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* MEETING SUMMARIES */}
+          {activeTab === 'summaries' && (
+            <div className="flex-1 flex overflow-hidden">
+              {/* Left Side: Input */}
+              <div className="w-1/2 bg-[#171717] border-r border-gray-800 flex flex-col p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-xl font-bold text-gray-200 flex items-center gap-2">
+                    <FileText className="w-5 h-5 text-blue-500" /> Raw Transcript
+                  </h2>
+                  <button onClick={toggleListening} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${isListening ? 'bg-red-500/20 text-red-400 animate-pulse border border-red-500/30' : 'bg-[#2f2f2f] text-gray-300 hover:bg-gray-700'}`}>
+                    <Mic className="w-4 h-4" /> {isListening ? "Listening..." : "Dictate"}
+                  </button>
+                </div>
+                <textarea 
+                  value={transcriptInput}
+                  onChange={(e) => setTranscriptInput(e.target.value)}
+                  placeholder="Paste your raw Zoom transcript, lecture notes, or click 'Dictate' to speak directly to Omni-Core..."
+                  className="flex-1 bg-[#212121] border border-gray-800 rounded-xl p-4 text-gray-300 outline-none resize-none focus:border-blue-500/50 custom-scrollbar text-[15px] leading-relaxed mb-4"
+                />
+                <button 
+                  onClick={handleGenerateSummary}
+                  disabled={isSummarizing || !transcriptInput.trim()}
+                  className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-xl shadow-lg shadow-blue-900/20 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {isSummarizing ? <Activity className="w-5 h-5 animate-spin"/> : <BrainCircuit className="w-5 h-5"/>}
+                  Extract Intel
+                </button>
+              </div>
+
+              {/* Right Side: Output */}
+              <div className="w-1/2 bg-[#1a1a1a] flex flex-col p-6 relative">
+                <h2 className="text-xl font-bold text-gray-200 flex items-center gap-2 mb-4">
+                  <Activity className="w-5 h-5 text-emerald-500" /> Processed Summary
+                </h2>
+                <div className="flex-1 bg-[#212121] border border-gray-800 rounded-xl p-6 overflow-y-auto custom-scrollbar">
+                  {!summaryOutput && !isSummarizing ? (
+                    <div className="h-full flex flex-col items-center justify-center text-gray-600">
+                      <FileText className="w-12 h-12 mb-4 opacity-30" />
+                      <p>Awaiting raw data input.</p>
+                    </div>
+                  ) : isSummarizing ? (
+                    <div className="h-full flex flex-col items-center justify-center text-blue-500/80">
+                      <Activity className="w-10 h-10 mb-4 animate-spin" />
+                      <p className="font-mono tracking-widest text-sm uppercase">Synthesizing...</p>
+                    </div>
+                  ) : (
+                    <div className="markdown-body text-gray-200">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{summaryOutput}</ReactMarkdown>
+                    </div>
+                  )}
+                </div>
+                {summaryOutput && (
+                  <button 
+                    onClick={() => {
+                      const newNote = { id: Date.now().toString(), title: "Meeting Summary", content: summaryOutput, course_id: '' };
+                      setNotes([newNote, ...notes]);
+                      setActiveNote(newNote);
+                      setActiveTab('notes');
+                    }}
+                    className="absolute top-6 right-6 px-4 py-2 bg-[#2f2f2f] hover:bg-gray-700 rounded-lg text-sm font-medium text-white transition-colors border border-gray-700"
+                  >
+                    Save to Vault
+                  </button>
+                )}
+              </div>
             </div>
           )}
 
