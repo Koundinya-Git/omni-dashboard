@@ -1,6 +1,7 @@
-// src/capture/accessibility_lin.rs
-
-use active_win_pos_rs::get_active_window;
+pub fn start_loop() {
+    println!("Starting Linux accessibility loop...");
+    
+    use active_win_pos_rs::get_active_window;
 
 pub fn capture_active_window() {
     match get_active_window() {
@@ -22,4 +23,5 @@ pub async fn walk_ui_tree() -> Result<(), Box<dyn std::error::Error>> {
     
     // Linux tree walking logic using AT-SPI
     Ok(())
+}
 }

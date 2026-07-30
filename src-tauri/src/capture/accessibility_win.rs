@@ -1,3 +1,6 @@
+pub fn start_loop() {
+    println!("Starting Windows accessibility loop...");
+    
 use std::thread;
 use std::time::Duration;
 use uiautomation::UIAutomation;
@@ -81,4 +84,6 @@ fn extract_text_from_element(
         }
     }
     Ok(())
+}
+
 }
