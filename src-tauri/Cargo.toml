@@ -36,4 +36,7 @@ windows = { version = "0.52", features = [
     "Win32_Foundation",
     "Win32_UI_WindowsAndMessaging",
 ] }
-active-win-pos-rs = "0.11.0"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+atspi = "0.22" # Linux UI Accessibility DBus interface
+active-win-pos-rs = "0.11.0" # Works on both Windows and Linux
