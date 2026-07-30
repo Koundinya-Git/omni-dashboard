@@ -26,7 +26,6 @@ tauri-plugin-notification = "2.0.0"
 tauri-plugin-dialog = "2.0.0"
 pdf-extract = "0.7.2"
 lopdf = "0.32"
-active-win-pos-rs = "0.11.0"
 
 [lib]
 name = "omni_dashboard_lib"
@@ -37,3 +36,4 @@ windows = { version = "0.52", features = [
     "Win32_Foundation",
     "Win32_UI_WindowsAndMessaging",
 ] }
+active-win-pos-rs = "0.11.0"
