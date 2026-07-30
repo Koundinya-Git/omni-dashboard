@@ -19,27 +19,29 @@ use active_win_pos_rs::get_active_window;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use serde_json::json;
 
-#[cdg(target_os = "windows")]
-use std::os::windows::process::CommandExt
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
 
 fn apply_hidden_flag(cmd: &mut Command) {
-    #[cfg(target_os = "windows")] 
+    #[cfg(target_os = "windows")]
     {
-        cmd.creation_flags(0x08000000);
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = cmd; // Do nothing on Linux/macOS
     }
 }
 
-const CREATE_NO_WINDOW: u32 = 0x08000000;
-                              
 pub struct DbState(pub Mutex<Connection>);
-                                                                  
+
 pub enum AudioCommand {
     Play(String),
     Stop,
 }
-                                                                
+
 pub struct AudioState(pub Mutex<Sender<AudioCommand>>);
-                                                                      
+
 fn init_db() -> SqlResult<Connection> {
     let conn = Connection::open("omni_core.db")?;
 
@@ -203,7 +205,7 @@ fn init_db() -> SqlResult<Connection> {
         )",
         [],
     )?;
-                                 
+
     conn.execute(
         "CREATE TABLE IF NOT EXISTS immutable_telemetry (
             id TEXT PRIMARY KEY,
@@ -294,7 +296,7 @@ fn init_db() -> SqlResult<Connection> {
 
     Ok(conn)
 }
-                                    
+
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct TaskItem {
     pub id: String,
@@ -302,7 +304,7 @@ pub struct TaskItem {
     pub quadrant: i32,
     pub completed: bool,
 }
-                                                 
+
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct NoteItem {
     pub id: String,
@@ -310,7 +312,7 @@ pub struct NoteItem {
     pub content: String,
     pub course_id: String,
 }
-                                                               
+
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct CourseItem {
     pub id: String,
@@ -319,14 +321,14 @@ pub struct CourseItem {
     pub description: String,
     pub color: String,
 }
-                                                                 
+
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct WorkspaceItem {
     pub id: String,
     pub name: String,
     pub created_at: i64,
 }
-                                                                      
+
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct ChatSessionItem {
     pub id: String,
@@ -335,7 +337,7 @@ pub struct ChatSessionItem {
     pub created_at: i64,
     pub updated_at: i64,
 }
-                                                
+
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct ChatItem {
     pub id: String,
@@ -344,7 +346,7 @@ pub struct ChatItem {
     pub content: String,
     pub timestamp: i64,
 }
-                                                            
+
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct FocusSessionItem {
     pub id: String,
@@ -353,7 +355,7 @@ pub struct FocusSessionItem {
     pub timestamp: i64,
     pub title: Option<String>,
 }
-                                                                        
+
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 pub struct UserSettings {
     pub user_name: String,
@@ -366,7 +368,7 @@ pub struct UserSettings {
     pub auto_record_meetings: String,
     pub is_onboarded: String,
 }
-                                                                          
+
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 #[allow(non_snake_case)]
 pub struct YTMusicSong {
@@ -376,17 +378,17 @@ pub struct YTMusicSong {
     pub thumbnails: Vec<Thumbnail>,
     pub duration: String,
 }
-                                                                     
+
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct Artist {
     pub name: String,
 }
-                                                            
+
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct Thumbnail {
     pub url: String,
 }
-                                                                     
+
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct PlaylistItem {
     pub id: String,
@@ -395,7 +397,7 @@ pub struct PlaylistItem {
     pub songs: Vec<YTMusicSong>,
     pub created_at: i64,
 }
-                                                                                     
+
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct OfflineSongItem {
     pub id: String,
@@ -406,7 +408,7 @@ pub struct OfflineSongItem {
     pub thumbnail_url: String,
     pub source: String, 
 }
-                                                          
+
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct TextbookItem {
     pub id: String,
@@ -417,7 +419,7 @@ pub struct TextbookItem {
     pub total_pages: i32,
     pub created_at: i64,
 }
-                                                                                                
+
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct TextbookAttachment {
     pub textbook_id: String,
@@ -425,7 +427,7 @@ pub struct TextbookAttachment {
     pub page_end: Option<i32>,
     pub exact_snippet: Option<String>,
 }
-                                                                
+
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct BookSetItem {
     pub id: String,
@@ -433,7 +435,7 @@ pub struct BookSetItem {
     pub created_at: i64,
     pub textbook_ids: Vec<String>,
 }
-                                                            
+
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct CalendarEventItem {
     pub id: String,
@@ -446,7 +448,7 @@ pub struct CalendarEventItem {
     pub color: String,
     pub is_all_day: bool,
 }
-                                                                    
+
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct GoalItem{
     pub id: String,
@@ -475,7 +477,7 @@ pub struct Flashcard {
     pub is_starred: bool,
     pub next_review: i64,
 }
-                                                                               
+
 fn get_user_settings_internal(conn: &Connection) -> UserSettings {
     let mut user_name = String::from("User");
     let mut user_bio = String::new();
@@ -521,7 +523,6 @@ fn get_user_settings_internal(conn: &Connection) -> UserSettings {
     }
 }
 
-                                                                        
 fn build_db_context(conn: &Connection) -> String {
     let settings = get_user_settings_internal(conn);
     let mut context = String::from("\n\n=== OMNI-CORE SYSTEM CONTEXT & USER PROFILE ===\n");
@@ -540,7 +541,6 @@ fn build_db_context(conn: &Connection) -> String {
     let current_time = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as i64;
     let one_day_ms = 86_400_000;
     
-                                                 
     context.push_str("\n--- LIVE MEMORY CONTEXT (OBSERVER EFFECT) ---\n");
     let one_hour_ago = current_time - 3_600_000;
     if let Ok(mut stmt) = conn.prepare("SELECT app_name, window_title, category, COUNT(*) as time_spent FROM immutable_telemetry WHERE timestamp > ?1 GROUP BY window_title ORDER BY time_spent DESC LIMIT 5") {
@@ -646,7 +646,6 @@ fn build_db_context(conn: &Connection) -> String {
     context
 }
 
-                                                                                                                     
 fn fetch_textbook_context(conn: &Connection, attachment: &TextbookAttachment, user_prompt: &str) -> String {
     let mut context = String::from("\n\n=== ATTACHED TEXTBOOK DOCUMENT CONTEXT ===\n");
     
@@ -740,7 +739,7 @@ fn fetch_textbook_context(conn: &Connection, attachment: &TextbookAttachment, us
     context.push_str("\nCRITICAL INSTRUCTION: If answering questions about this attached document, YOU MUST CITE SPECIFIC PAGE NUMBERS from the extracts provided above.\n================================================\n");
     context
 }
-                                                 
+
 #[tauri::command]
 fn get_settings(db: State<'_, DbState>) -> Result<UserSettings, String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
@@ -772,7 +771,7 @@ fn save_settings(db: State<'_, DbState>, settings: UserSettings) -> Result<(), S
 
     Ok(())
 }
-                                                                                       
+
 #[tauri::command]
 fn get_workspaces(db: State<'_, DbState>) -> Result<Vec<WorkspaceItem>, String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
@@ -811,7 +810,7 @@ fn create_workspace(
     .map_err(|e| e.to_string())?;
     Ok(())
 }                                                                
-                                                                      
+
 #[tauri::command]
 fn rename_workspace(db: State<'_, DbState>, id: String, name: String) -> Result<(), String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
@@ -835,7 +834,7 @@ fn delete_workspace(db: State<'_, DbState>, id: String) -> Result<(), String> {
         .map_err(|e| e.to_string())?;
     Ok(())
 }
-                                
+
 #[tauri::command]
 fn get_chat_sessions(db: State<'_, DbState>) -> Result<Vec<ChatSessionItem>, String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
@@ -877,7 +876,7 @@ fn create_chat_session(
     .map_err(|e| e.to_string())?;
     Ok(())
 }
-                                  
+
 #[tauri::command]
 fn rename_chat_session(db: State<'_, DbState>, id: String, title: String) -> Result<(), String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
@@ -902,7 +901,7 @@ fn move_session_to_workspace(
     .map_err(|e| e.to_string())?;
     Ok(())
 }
-                                              
+
 #[tauri::command]
 fn delete_chat_session(db: State<'_, DbState>, id: String) -> Result<(), String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
@@ -940,7 +939,7 @@ fn get_chats_by_session(
     }
     Ok(list)
 }
-                                        
+
 #[tauri::command]
 fn save_chat(
     db: State<'_, DbState>,
@@ -974,7 +973,7 @@ fn clear_chats_by_session(db: State<'_, DbState>, session_id: String) -> Result<
     .map_err(|e| e.to_string())?;
     Ok(())
 }
-                                      
+
  #[tauri::command]
  fn get_goals(db: State<'_, DbState>) -> Result<Vec<GoalItem>, String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
@@ -1017,7 +1016,7 @@ fn add_goal(
     .map_err(|e| e.to_string())?;
     Ok(())
 }
-                                                                                  
+
 #[tauri::command]
 fn update_goal_assessment(
     db: State<'_, DbState>,
@@ -1528,16 +1527,16 @@ fn remove_song_from_playlist(
 async fn search_yt_music(query: String) -> Result<String, String> {
     let search_query = format!("ytsearch5:{}", query);
 
-    let output = std::process::Command::new("yt-dlp")
-        .args(&[
-            &search_query,
-            "--dump-json",
-            "--no-playlist",
-            "--flat-playlist",
-        ])
-        .creation_flags(CREATE_NO_WINDOW)
-        .output()
-        .map_err(|e| format!("Failed to run yt-dlp: {}", e))?;
+    let mut cmd = std::process::Command::new("yt-dlp");
+    cmd.args(&[
+        &search_query,
+        "--dump-json",
+        "--no-playlist",
+        "--flat-playlist",
+    ]);
+    apply_hidden_flag(&mut cmd);
+    
+    let output = cmd.output().map_err(|e| format!("Failed to run yt-dlp: {}", e))?;
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let mut results: Vec<YTMusicSong> = Vec::new();
@@ -1622,16 +1621,16 @@ async fn download_yt_song(
     let yt_host = "music.youtube.com";
     let dl_url = format!("https://{}/watch?v={}", yt_host, video_id);
     
-    let output = std::process::Command::new("yt-dlp")
-        .args(&[
-            "-x", 
-            "--audio-format", "mp3", 
-            "-o", &file_path.to_string_lossy(), 
-            &dl_url
-        ])
-        .creation_flags(CREATE_NO_WINDOW)
-        .output()
-        .map_err(|e| format!("Failed to execute yt-dlp: {}", e))?;
+    let mut cmd = std::process::Command::new("yt-dlp");
+    cmd.args(&[
+        "-x", 
+        "--audio-format", "mp3", 
+        "-o", &file_path.to_string_lossy(), 
+        &dl_url
+    ]);
+    apply_hidden_flag(&mut cmd);
+    
+    let output = cmd.output().map_err(|e| format!("Failed to execute yt-dlp: {}", e))?;
         
     if !output.status.success() {
         return Err(String::from_utf8_lossy(&output.stderr).to_string());
@@ -2135,7 +2134,7 @@ fn get_telemetry_stats(db: State<'_, DbState>) -> Result<serde_json::Value, Stri
         "top_apps": top_apps
     }))
 }
-
+                                                                                  
 #[tauri::command]
 fn read_aloud(
     state: State<'_, AudioState>,
@@ -2190,18 +2189,19 @@ fn read_aloud(
         return Err("Voice model not found. Did you download the .onnx files?".into());
     }
 
-    let mut child = Command::new(&exe_path)
-        .current_dir(&piper_cwd)
+    let mut cmd = Command::new(&exe_path);
+    cmd.current_dir(&piper_cwd)
         .arg("--model")
         .arg(&model_path)
         .arg("--length_scale")
         .arg(length_scale.to_string())
         .arg("--output_file")
         .arg(&output_path)
-        .stdin(Stdio::piped())
-        .creation_flags(CREATE_NO_WINDOW)
-        .spawn()
-        .map_err(|e| format!("Failed to start Piper: {}", e))?;
+        .stdin(Stdio::piped());
+        
+    apply_hidden_flag(&mut cmd);
+    
+    let mut child = cmd.spawn().map_err(|e| format!("Failed to start Piper: {}", e))?;
 
     if let Some(mut stdin) = child.stdin.take() {
         let _ = stdin.write_all(text.as_bytes());
