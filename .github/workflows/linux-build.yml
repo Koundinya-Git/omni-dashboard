@@ -1,0 +1,33 @@
+name: Linux Builder
+on: [push]
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install OS Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-ido3-dev libayatana-appindicator3-dev librsvg2-dev
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install NPM dependencies
+        run: npm install
+
+      - name: Build the .deb
+        run: npm run tauri build
+
+      - name: Upload .deb Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: omni-core-linux-deb
+          path: src-tauri/target/release/bundle/deb/*.deb
