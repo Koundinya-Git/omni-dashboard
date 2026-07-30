@@ -15,42 +15,23 @@ use tauri::{
     Manager, State,
 };
 use lopdf::Document;
+use active_win_pos_rs::get_active_window;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use serde_json::json;
 
 #[cfg(target_os = "windows")]
-use active_win_pos_rs::get_active_window;
-
-#[cfg(not(target_os = "windows"))]
-#[derive(Debug)]
-pub struct WindowInfo {
-    pub app_name: String,
-    pub title: String,
-    pub process_id: u32,
-    pub position: WindowPosition,
-}
-
-#[cfg(not(target_os = "windows"))]
-#[derive(Debug)]
-pub struct WindowPosition {
-    pub x: i32,
-    pub y: i32,
-    pub width: u32,
-    pub height: u32,
-}
-
-#[cfg(not(target_os = "windows"))]
-fn get_active_window() -> Result<WindowInfo, String> {
-    Ok(WindowInfo {
-        app_name: "Linux Desktop".to_string(),
-        title: "Workspace".to_string(),
-        process_id: 0,
-        position: WindowPosition { x: 0, y: 0, width: 1920, height: 1080 },
-    })
-}
-
-#[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
+
+fn apply_hidden_flag(cmd: &mut Command) {
+    #[cfg(target_os = "windows")]
+    {
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = cmd; // Do nothing on Linux/macOS
+    }
+}
 
 pub struct DbState(pub Mutex<Connection>);
 
@@ -2153,7 +2134,7 @@ fn get_telemetry_stats(db: State<'_, DbState>) -> Result<serde_json::Value, Stri
         "top_apps": top_apps
     }))
 }
-
+                                                                                  
 #[tauri::command]
 fn read_aloud(
     state: State<'_, AudioState>,
@@ -2199,11 +2180,10 @@ fn read_aloud(
     let exe_path = piper_cwd.join("piper.exe");
     #[cfg(not(target_os= "windows"))]
     let exe_path = piper_cwd.join("piper");
-    
     let output_path = std::env::temp_dir().join("omni_core_tts_temp.wav");
 
     if !exe_path.exists() {
-        return Err("piper executable not found".into());
+        return Err("piper.exe not found".into());
     }
     if !model_path.exists() {
         return Err("Voice model not found. Did you download the .onnx files?".into());
@@ -2633,11 +2613,13 @@ You may only use ONE tag per response.
 
     thread_result
 }
-
+                                                                                                         
 fn main() {
+                                                                                            
     let db_conn = init_db().expect("Failed to initialize SQLite database");
+                                                                                           
     let (audio_tx, audio_rx) = mpsc::channel::<AudioCommand>();
-
+                                                                                          
     thread::spawn(move || match rodio::OutputStream::try_default() {
         Ok((_stream, stream_handle)) => {
             if let Ok(mut sink) = rodio::Sink::try_new(&stream_handle) {
@@ -2672,7 +2654,8 @@ fn main() {
         .plugin(tauri_plugin_notification::init())
         .setup(|app| {
             let quit_i = MenuItem::with_id(app, "quit", "Shutdown Omni-Core", true, None::<&str>)?;
-            let show_i = MenuItem::with_id(app, "show", "Open Executive Dashboard", true, None::<&str>)?;
+            let show_i =
+                MenuItem::with_id(app, "show", "Open Executive Dashboard", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&show_i, &quit_i])?;
 
             let _tray = TrayIconBuilder::new()
@@ -2689,7 +2672,7 @@ fn main() {
                     _ => {}
                 })
                 .build(app)?;
-
+                                                                                                     
             tauri::async_runtime::spawn(async move {
                 if let Ok(conn) = Connection::open("omni_core.db") {
                     let mut is_recording_meeting = false;
@@ -2737,19 +2720,12 @@ fn main() {
                             if is_meeting && auto_record_enabled && !is_recording_meeting {
                                 println!("[WHISPER] Meeting detected! Initiating silent audio capture...");
                                 is_recording_meeting = true;
-
-                                let mut cmd = std::process::Command::new("ffmpeg");
-                                
-                                #[cfg(target_os = "windows")]
-                                cmd.args(&["-f", "dshow", "-i", "audio=Stereo Mix", "-y", "temp_meeting.wav"]);
-                                #[cfg(target_os = "linux")]
-                                cmd.args(&["-f", "pulse", "-i", "default", "-y", "temp_meeting.wav"]);
-                                #[cfg(target_os = "macos")]
-                                cmd.args(&["-f", "avfoundation", "-i", ":0", "-y", "temp_meeting.wav"]);
-
-                                apply_hidden_flag(&mut cmd);
  
-                                if let Ok(child) = cmd.spawn() {
+                                if let Ok(child) = std::process::Command::new("ffmpeg")
+                                    .args(&["-f", "dshow", "-i", "audio=Stereo Mix", "-y", "temp_meeting.wav"])
+                                    .creation_flags(0x08000000) 
+                                    .spawn() 
+                                {
                                     ffmpeg_child = Some(child);
                                 } else {
                                     println!("[WHISPER WARNING] Failed to start ffmpeg. Is it installed?");
@@ -2765,20 +2741,16 @@ fn main() {
                                 }
                                 
                                 let base_dir = std::env::current_dir().unwrap_or_default();
-                                
-                                #[cfg(target_os = "windows")]
                                 let whisper_exe = base_dir.join("whisper").join("main.exe");
-                                #[cfg(not(target_os = "windows"))]
-                                let whisper_exe = base_dir.join("whisper").join("main");
-                                
                                 let model_path = base_dir.join("whisper").join("ggml-base.en.bin");
                                 
                                 if whisper_exe.exists() && model_path.exists() {
-                                    let mut cmd = std::process::Command::new(&whisper_exe);
-                                    cmd.args(&["-m", model_path.to_str().unwrap(), "-f", "temp_meeting.wav", "-otxt"]);
-                                    apply_hidden_flag(&mut cmd);
-                                    
-                                    if cmd.output().is_ok() {
+                                    let whisper_res = std::process::Command::new(&whisper_exe)
+                                        .args(&["-m", model_path.to_str().unwrap(), "-f", "temp_meeting.wav", "-otxt"])
+                                        .creation_flags(0x08000000)
+                                        .output();
+                                        
+                                    if whisper_res.is_ok() {
                                         let txt_file = "temp_meeting.wav.txt";
                                         
                                         if let Ok(transcript) = std::fs::read_to_string(txt_file) {
@@ -2796,10 +2768,11 @@ fn main() {
                                         }
                                     }
                                 } else {
-                                    println!("[WHISPER WARNING] whisper binary or model not found in src-tauri.");
+                                    println!("[WHISPER WARNING] whisper/main.exe or ggml-base.en.bin not found in src-tauri.");
                                 }
                             }
                         }
+                        
                         tokio::time::sleep(Duration::from_secs(10)).await;
                     }
                 }
@@ -2807,6 +2780,7 @@ fn main() {
 
             Ok(())
         })
+                                                                          
         .on_window_event(|_window, event| match event {
             tauri::WindowEvent::CloseRequested { .. } => {
                 let models_to_purge = [
@@ -2824,6 +2798,7 @@ fn main() {
             }
             _ => {}
         })
+                                                                                
         .invoke_handler(tauri::generate_handler![
             get_telemetry_stats,
             get_telemetry, 
