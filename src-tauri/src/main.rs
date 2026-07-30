@@ -4,7 +4,6 @@ use rusqlite::{params, Connection, Result as SqlResult};
 use std::fs::File;
 use std::io::BufReader;
 use std::io::Write;
-use std::os::windows::process::CommandExt;
 use std::process::{Command, Stdio};
 use std::sync::mpsc::{self, Sender};
 use std::sync::{Arc, Mutex};
@@ -19,6 +18,16 @@ use lopdf::Document;
 use active_win_pos_rs::get_active_window;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use serde_json::json;
+
+#[cdg(target_os = "windows")]
+use std::os::windows::process::CommandExt
+
+fn apply_hidden_flag(cmd: &mut Command) {
+    #[cfg(target_os = "windows")] 
+    {
+        cmd.creation_flags(0x08000000);
+    }
+}
 
 const CREATE_NO_WINDOW: u32 = 0x08000000;
                               
@@ -1584,7 +1593,7 @@ async fn get_yt_audio_url(video_id: String) -> Result<String, String> {
     
     let mut cmd = std::process::Command::new("yt-dlp");
     cmd.args(&["-f", "bestaudio", "-g", &audio_url]);
-    cmd.creation_flags(CREATE_NO_WINDOW);
+    apply_hidden_flag(&mut cmd);
 
     let output = cmd.output().map_err(|e| format!("Failed: {}", e))?;
 
@@ -2167,7 +2176,11 @@ fn read_aloud(
 
     let length_scale = 200.0 / wpm;
     let piper_cwd = base_dir.join("piper").join("piper");
+
+    #[cfg(target_os = "windows")]
     let exe_path = piper_cwd.join("piper.exe");
+    #[cfg(not(target_os= "windows"))]
+    let exe_path = piper_cwd.join("piper");
     let output_path = std::env::temp_dir().join("omni_core_tts_temp.wav");
 
     if !exe_path.exists() {
