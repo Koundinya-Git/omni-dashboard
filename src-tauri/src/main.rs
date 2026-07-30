@@ -15,12 +15,8 @@ use tauri::{
     Manager, State,
 };
 use lopdf::Document;
-use active_win_pos_rs::get_active_window;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use serde_json::json;
-
-#[cfg(target_os = "windows")]
-use std::os::windows::process::CommandExt;
 
 #[cfg(target_os = "windows")]
 use active_win_pos_rs::get_active_window;
@@ -54,18 +50,7 @@ fn get_active_window() -> Result<WindowInfo, String> {
 }
 
 #[cfg(target_os = "windows")]
-use uiautomation::UIAutomation;
-
-fn apply_hidden_flag(cmd: &mut Command) {
-    #[cfg(target_os = "windows")]
-    {
-        cmd.creation_flags(0x08000000);
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        let _ = cmd; // Do nothing on Linux/macOS
-    }
-}
+use std::os::windows::process::CommandExt;
 
 pub struct DbState(pub Mutex<Connection>);
 
