@@ -23,6 +23,37 @@ use serde_json::json;
 use std::os::windows::process::CommandExt;
 
 #[cfg(target_os = "windows")]
+use active_win_pos_rs::get_active_window;
+
+#[cfg(not(target_os = "windows"))]
+#[derive(Debug)]
+pub struct WindowInfo {
+    pub app_name: String,
+    pub title: String,
+    pub process_id: u32,
+    pub position: WindowPosition,
+}
+
+#[cfg(not(target_os = "windows"))]
+#[derive(Debug)]
+pub struct WindowPosition {
+    pub x: i32,
+    pub y: i32,
+    pub width: u32,
+    pub height: u32,
+}
+
+#[cfg(not(target_os = "windows"))]
+fn get_active_window() -> Result<WindowInfo, String> {
+    Ok(WindowInfo {
+        app_name: "Linux Desktop".to_string(),
+        title: "Workspace".to_string(),
+        process_id: 0,
+        position: WindowPosition { x: 0, y: 0, width: 1920, height: 1080 },
+    })
+}
+
+#[cfg(target_os = "windows")]
 use uiautomation::UIAutomation;
 
 fn apply_hidden_flag(cmd: &mut Command) {
