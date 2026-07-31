@@ -25,11 +25,11 @@ use std::os::windows::process::CommandExt;
 fn apply_hidden_flag(cmd: &mut Command) {
     #[cfg(target_os = "windows")]
     {
-        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+        cmd.creation_flags(0x08000000); 
     }
     #[cfg(not(target_os = "windows"))]
     {
-        let _ = cmd; // Do nothing on Linux/macOS
+        let _ = cmd; 
     }
 }
 
@@ -2345,6 +2345,35 @@ async fn extract_text_from_file(file_path: String) -> Result<String, String> {
 }
 
 #[tauri::command]
+fn kill_process_and_yell(
+    state: State<'_, AudioState>,
+    process_id: u32,
+    app_name: String,
+    title: String,
+) -> Result<(), String> {
+    let mut sys = System::new_all();
+    
+    sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
+
+    let pid = sysinfo::Pid::from_u32(process_id);
+    if let Some(process) = sys.process(pid) {
+        process.kill();
+        println!("[VICTOR PROTOCOL] Assassinated process: {} ({})", app_name, title);
+        
+        let warning_text = format!(
+            "Protocol violation detected. I just terminated {}, because you were looking at {}. Get back to work immediately.",
+            app_name, title
+        );
+        
+        let _ = read_aloud(state, warning_text, 220.0, "Victor".to_string());
+        
+        return Ok(());
+    }
+
+    Err("Process slipped away or was already closed.".into())
+}
+
+#[tauri::command]
 async fn ask_ollama(
     db: State<'_, DbState>,
     messages: Vec<serde_json::Value>,
@@ -2895,6 +2924,7 @@ fn main() {
             toggle_card,
             del_card,
             extract_text_from_file,
+            kill_process_and_yell, //HEHE, use and find out lmao
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -65,6 +65,25 @@ const QUOTES = [
   "The best way to get something done is to begin.", "The secret of getting ahead is getting started."
 ];
 
+const DISTRACTING_APPS = [
+  "discord", "steam", "epicgames", "riotclient", "leagueoflegends", "valorant", 
+  "minecraft", "javaw", "roblox", "csgo", "cs2", "overwatch", "dota2", "genshinimpact", 
+  "battle.net", "origin", "eadesktop", "ubisoftconnect", "gog galaxy",
+  "fortnite", "apex", "pubg", "rainbowsix", "rust", "destiny2", "terraria", 
+  "stardewvalley", "rocketleague", "amongus", "fallguys", "gta5", "gtav",
+  "spotify", "slack", "telegram", "whatsapp", "skype" // Add literally anything here
+];
+
+const SOCIAL_SITES = [
+  "youtube", "twitter", "x.com", "reddit", "instagram", "tiktok", "facebook", 
+  "netflix", "twitch", "hulu", "pinterest", "discord.com", "9gag", "tumblr", 
+  "vimeo", "dailymotion", "disneyplus", "hbomax", "primevideo", "crunchyroll"
+];
+
+const BROWSERS = [
+  "chrome", "edge", "msedge", "brave", "firefox", "opera", "vivaldi", "safari", "chromium"
+];
+
 const PERSONALITIES = [
   { name: "Victor", emoji: "⚔️", description: "Strict tactical executive mentor." },
   { name: "Morgan", emoji: "👓", description: "Razor-sharp, high-standard professor." },
@@ -258,9 +277,10 @@ export default function App() {
             const appName = (win.app_name || "").toLowerCase();
             const title = (win.title || "").toLowerCase();
             
-            const isBrowser = appName.includes("chrome") || appName.includes("edge") || appName.includes("brave") || appName.includes("firefox");
-            const isSocialSite = title.includes("youtube") || title.includes("twitter") || title.includes("x.com") || title.includes("reddit") || title.includes("instagram") || title.includes("tiktok");
-            const isDistractingApp = appName.includes("discord") || appName.includes("steam") || appName.includes("epicgames");
+            // The .some() method checks if any string in our giant arrays is inside the appName/title
+            const isBrowser = BROWSERS.some(b => appName.includes(b));
+            const isSocialSite = SOCIAL_SITES.some(s => title.includes(s));
+            const isDistractingApp = DISTRACTING_APPS.some(a => appName.includes(a));
 
             if ((isBrowser && isSocialSite) || isDistractingApp) {
               console.log("Caught slacking. Executing Victor Protocol.");
