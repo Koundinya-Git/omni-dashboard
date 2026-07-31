@@ -482,8 +482,46 @@ The system will compress everything and place your installer in: `src-tauri/targ
 * **Fix:** Omni-Core uses SQLite WAL (Write-Ahead Logging) to prevent this. If it happens, simply restart the app.
 
 ---
+## 8. Images of Project:
 
-## 8. ⚖️ License & Terms of Use
+<img width="1917" height="1078" alt="image" src="https://github.com/user-attachments/assets/25d964e7-f354-49ac-b554-326898aeff77" />
+
+<img width="1917" height="1078" alt="image" src="https://github.com/user-attachments/assets/a9766596-a29e-49b5-b903-650dddd3ee3b" />
+
+<img width="1852" height="1038" alt="image" src="https://github.com/user-attachments/assets/b7146cb1-f258-44c1-b845-70c45c154979" />
+
+<img width="1917" height="1078" alt="image" src="https://github.com/user-attachments/assets/d5d93ebc-9ff6-404e-8729-397dec926d3d" />
+
+<img width="1917" height="1078" alt="image" src="https://github.com/user-attachments/assets/6c55085d-c64d-432b-b465-6af48f1d309f" />
+
+<img width="1917" height="1078" alt="image" src="https://github.com/user-attachments/assets/c8b55be0-faf0-4ec2-b043-44b473f0bea8" />
+
+<img width="1917" height="1078" alt="image" src="https://github.com/user-attachments/assets/cba2eef9-bd85-44c8-a342-d68f8ed90e35" />
+
+<img width="1917" height="1078" alt="image" src="https://github.com/user-attachments/assets/b85b6785-ae7e-4fc8-8c81-9e2eec008711" />
+
+<img width="1917" height="1078" alt="image" src="https://github.com/user-attachments/assets/5dea7608-3595-4cfe-915d-4e3170d14dda" />
+
+<img width="1916" height="1078" alt="image" src="https://github.com/user-attachments/assets/d2ffbaeb-f4d3-4594-a60b-b6fffacf0f08" />
+
+<img width="1917" height="1078" alt="image" src="https://github.com/user-attachments/assets/ef2a9018-ee0f-4a83-8162-534c06401108" />
+
+<img width="1915" height="1078" alt="image" src="https://github.com/user-attachments/assets/60cdd664-b8d5-4f4e-adf3-6d11beb8fec5" />
+
+<img width="1917" height="1078" alt="image" src="https://github.com/user-attachments/assets/99791727-38b8-4e50-9e92-ec727662252e" />
+
+<img width="1917" height="1078" alt="image" src="https://github.com/user-attachments/assets/96eabb13-f858-42cb-9b83-e5cb5f71cbdc" />
+
+<img width="1621" height="600" alt="image" src="https://github.com/user-attachments/assets/f8ca7a26-76b8-413b-928b-c7afd6595c22" />
+
+<img width="1917" height="1078" alt="image" src="https://github.com/user-attachments/assets/60bb8d0d-983e-4033-a8d7-32ee09e4f3f2" />
+
+<img width="1917" height="1078" alt="image" src="https://github.com/user-attachments/assets/67a20da8-9372-4d83-81c7-881ad3e31877" />
+
+<img width="1917" height="1078" alt="image" src="https://github.com/user-attachments/assets/4a983481-e44f-4330-bdc4-65030b3a1419" />
+
+---
+## 9. License & Terms of Use
 
 This project is open-source software licensed under the **GNU General Public License v3 (GPLv3)** with explicit additional terms as permitted under **GPLv3 Section 7**. Please refer to `Terms_and_Conditions.md` for complete legal definitions and liability waivers regarding AI hallucination, database management, and active telemetry tracking. By using, cloning, or compiling this application, you explicitly agree to the said Terms and Conditions in the `Terms_and_Conditions.md` file.
 
