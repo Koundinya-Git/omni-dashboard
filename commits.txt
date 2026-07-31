@@ -1,0 +1,44 @@
+* [33m54f7156[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m removing all debian support due to excessive bugs, we will work on it, and then push to github
+* [33m5f579aa[m Fixing ALSA in GitHub Actions
+* [33m943e208[m Fixing ALSA in GitHub Actions
+* [33m91bdc12[m Fixing ALSA in GitHub Actions
+* [33m550bdb5[m Fixing ALSA in GitHub Actions
+* [33m9860e9e[m Fixing ALSA in GitHub Actions
+* [33m084c380[m Fixing ALSA in GitHub Actions
+* [33m43ca71d[m Fixing ALSA in GitHub Actions
+* [33mb9b74ac[m Fixing ALSA in GitHub Actions
+* [33m845194f[m Fixing ALSA in GitHub Actions
+* [33ma6dd58b[m Fixing ALSA in GitHub Actions
+* [33m09b67ee[m Fixing ALSA in GitHub Actions
+* [33md187f55[m Adding GitHub Actions to build Deb File
+* [33m0a78008[m Adding GitHub Actions to build Deb File
+* [33m08d4911[m live on debian platforms, releases will have deb files soon
+* [33m985250b[m save 3 for debian compatibilty
+* [33m49eb495[m save 2 for debian-base compatibility upgrades
+* [33ma0bd172[m wip: save 1 for debian compatibility updates
+* [33md6ad6be[m updated README.md
+* [33meb1ba0c[m[33m ([m[1;33mtag: [m[1;33mv1[m[33m, [m[1;31morigin/features/startup[m[33m, [m[1;32mfeatures/startup[m[33m)[m added startup features, and basic onboarding
+* [33m2ca91b6[m[33m ([m[1;33mtag: [m[1;33mv0.3.0[m[33m, [m[1;32mfeature/killswitch-Victor[m[33m)[m fixed persona emoji bug
+* [33md18dbe7[m[33m ([m[1;32mfeature/meeting_summary+ai_scheduler[m[33m)[m completed AI Scheduler and Meeting Summaries FINALLLYYY
+* [33m16ad6ca[m fixed auto-flashcards, simple JSON issue lmao
+* [33m4fd6840[m[33m ([m[1;33mtag: [m[1;33mv0.2.0[m[33m)[m just cleaning things up
+* [33mdb164d2[m[33m ([m[1;31morigin/feature/auto-flashcards[m[33m, [m[1;32mfeature/auto-flashcards[m[33m)[m Added the Auto-Flashcards System (full-stack)
+* [33md44330d[m wip: backend done for the auto-flashcards
+* [33m0e8d2ae[m[33m ([m[1;32mfeature/goals-trajectory[m[33m)[m FINALLY, I'm DONE WITH THE GOALS TRAJECTORYYYYY (full stack btwww)
+* [33m32202eb[m[33m ([m[1;31morigin/feature/goals-trajectory[m[33m)[m wip: Backend for Goals trajectory: lol everything is fixed now, few bugs in the previous push
+* [33m5b19b77[m wip: Fixed error in Backend for Goals Trajectory, I accidentally forgot to tyoe out the update_goal_assessment function lol
+* [33mf7c9877[m wip: Backend for Goals Trajectory
+* [33m4992f3c[m[33m ([m[1;33mtag: [m[1;33mv0.1.0[m[33m)[m wip: adding system statistics
+* [33ma975fe6[m[33m ([m[1;31morigin/feature/stats-dashboard[m[33m, [m[1;32mfeature/stats-dashboard[m[33m)[m wip: adding system statistics
+* [33mda87f98[m wip: adding comments
+* [33md4ff511[m wip: modifying README.md
+* [33m467921a[m wip: modifying README.md
+* [33mb53c539[m[33m ([m[1;31morigin/feature/observer-effect[m[33m, [m[1;32mfeature/observer-effect[m[33m)[m wip: adding system tracking (observer effect) full-stack
+* [33m3eabe89[m[33m ([m[1;32mfeature/telemetry[m[33m)[m wip: adding system tracking (observer effect) backend
+* [33m75e44d3[m[33m ([m[1;31morigin/feature/telemetry[m[33m)[m wip: adding system telemetry full-stack
+* [33m83eb7b9[m wip: adding system telemetry backend
+* [33m59cf56c[m wip: adding system telemetry backend
+* [33me37b628[m change in README, LICENSE, with the addition of Terms_and_Conditions.md
+* [33m1e0b3a1[m relicense: switch to GPLv3 with Section 7 attribution terms
+* [33m561c5de[m relicense: switch to GPLv3 with Section 7 attribution terms
+* [33m56ed6ea[m Initial commit: Omni-Core V1 Architecture with LFS

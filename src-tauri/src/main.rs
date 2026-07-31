@@ -2323,7 +2323,27 @@ fn fetch_web_snippets(query: &str) -> String {
 
     String::from("\n(Web search yielded no immediate results.)\n")
 }
-                                                                   
+       
+#[tauri::command]
+async fn extract_text_from_file(file_path: String) -> Result<String, String> {
+    let path = std::path::Path::new(&file_path);
+    let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("").to_lowercase();
+
+    if ext == "pdf" {
+        let doc = Document::load(&file_path).map_err(|e| format!("PDF Error: {}", e))?;
+        let mut text = String::new();
+        for (page_num, _) in doc.get_pages() {
+            let page_text = doc.extract_text(&[page_num]).unwrap_or_default();
+            text.push_str(&page_text);
+            text.push_str("\n");
+    }
+    Ok(text)
+}
+ else {
+    std::fs::read_to_string(&file_path).map_err(|e| format!("File Error: {}", e))
+ }
+}
+
 #[tauri::command]
 async fn ask_ollama(
     db: State<'_, DbState>,
@@ -2874,6 +2894,7 @@ fn main() {
             add_flashcards,
             toggle_card,
             del_card,
+            extract_text_from_file,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

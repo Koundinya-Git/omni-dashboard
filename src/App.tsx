@@ -145,6 +145,9 @@ export default function App() {
   const [searchWebEnabled, setSearchWebEnabled] = useState<boolean>(false); 
   const chatEndRef = useRef<HTMLDivElement>(null);
 
+  const [attachedChatFile, setAttachedChatFile] = useState<{name: string, content: string} | null>(null);
+  const [isAttachingFile, setIsAttachingFile] = useState(false);
+
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
@@ -717,6 +720,28 @@ export default function App() {
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [chatHistory, isTyping]);
   useEffect(() => { const flushMemory = async () => { try { await invoke('flush_vram', { modelTier: selectedTier }); } catch (e) { console.error(e); } }; flushMemory(); }, [selectedTier]);
 
+  const handleAttachFileToChat = async () => {
+    try {
+      const selected = await open({ 
+        multiple: false,
+        filters: [{ name: 'Documents', extensions: ['pdf', 'txt', 'md', 'csv', 'json', 'rs', 'tsx', 'ts', 'js', 'py'] }]
+      });
+      if (!selected || Array.isArray(selected)) return;
+      
+      setIsAttachingFile(true);
+      const fileName = selected.split(/[\\/]/).pop() || 'Document';
+      const content = await invoke<string>('extract_text_from_file', { filePath: selected });
+      
+      // We cap it at ~30k characters to prevent instantly overflowing smaller VRAM models
+      setAttachedChatFile({ name: fileName, content: content.substring(0, 30000) }); 
+    } catch (e: any) {
+      console.error(e);
+      alert("Failed to read file. Please ensure it's a valid text or PDF file.\nError: " + e);
+    } finally {
+      setIsAttachingFile(false);
+    }
+  };
+
   const handleSendMessage = async (customPrompt?: string) => {
     const textToSend = typeof customPrompt === 'string' ? customPrompt : chatInput;
     if (!textToSend.trim() || isTyping) return;
@@ -741,8 +766,13 @@ export default function App() {
     await saveChatToDb('user', textToSend, targetSessionId);
     if (activeTab !== 'chat') setActiveTab('chat');
 
-    try {
-      const messagePayload = newHistory.map(msg => ({ role: msg.role, content: msg.content }));
+    try {      
+const messagePayload = newHistory.map((msg, index) => {
+        if (index === newHistory.length - 1 && attachedChatFile) {
+            return { role: msg.role, content: `[ATTACHED FILE CONTENT: ${attachedChatFile.name}]\n${attachedChatFile.content}\n\nUSER QUERY:\n${msg.content}` };
+        }
+        return { role: msg.role, content: msg.content };
+      });
       let currentModelTier = selectedTier;
       if (activeTab === 'rag') currentModelTier = 'RAG';
 
@@ -775,7 +805,7 @@ export default function App() {
           }
       }
     } catch (error) { setChatHistory(prev => [...prev, { role: 'ai', content: String(error), isError: true }]); } 
-    finally { setIsTyping(false); if(attachedTextbookContext) setAttachedTextbookContext(null); }
+    finally { setIsTyping(false); if(attachedTextbookContext) setAttachedTextbookContext(null); if(attachedChatFile) setAttachedChatFile(null);}
   };
 
   const renderMonthView = () => {
@@ -1368,9 +1398,32 @@ export default function App() {
                         </div>
                       )}
 
+                      {attachedTextbookContext && (
+                        <div className="flex items-center gap-2 bg-[#2f2f2f] border border-gray-600 rounded-xl px-3 py-2 w-fit shadow-md">
+                           {/* ... keep existing textbook pill code ... */}
+                           <button onClick={() => setAttachedTextbookContext(null)} className="p-1 text-gray-400 hover:text-white rounded-full hover:bg-gray-700 transition-colors"><X className="w-4 h-4" /></button>
+                        </div>
+                      )}
+
+                      {/* NEW UPLOADED FILE PILL */}
+                      {attachedChatFile && (
+                        <div className="flex items-center gap-2 bg-[#2f2f2f] border border-gray-600 rounded-xl px-3 py-2 w-fit shadow-md mb-2">
+                           <div className="w-8 h-8 bg-blue-500/20 rounded flex items-center justify-center text-blue-400"><FileText className="w-4 h-4" /></div>
+                           <div className="flex flex-col pr-4">
+                              <span className="text-xs font-bold text-gray-200">Attached: {attachedChatFile.name}</span>
+                              <span className="text-[10px] text-gray-400">File loaded into context buffer</span>
+                           </div>
+                           <button onClick={() => setAttachedChatFile(null)} className="p-1 text-gray-400 hover:text-white rounded-full hover:bg-gray-700 transition-colors"><X className="w-4 h-4" /></button>
+                        </div>
+                      )}
+
                       <div className="relative flex items-center bg-[#2f2f2f] rounded-full border border-gray-600 focus-within:border-gray-500 transition-colors shadow-sm">
-                        <button className="p-3 ml-1 text-gray-400 hover:text-white"><Plus className="w-6 h-6" /></button>
-                        <input type="text" value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()} placeholder={isListening ? "Listening... (speak now)" : attachedTextbookContext ? "Ask a question about the attached document..." : "Message Omni-Core..."} className="flex-1 bg-transparent px-2 py-4 outline-none text-gray-100 placeholder-gray-400 text-[15px]" />
+                        
+                        <button onClick={handleAttachFileToChat} disabled={isAttachingFile} className="p-3 ml-1 text-gray-400 hover:text-white disabled:opacity-50">
+                            {isAttachingFile ? <Activity className="w-6 h-6 animate-spin"/> : <Plus className="w-6 h-6" />}
+                        </button>
+
+                        <input type="text" value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()} placeholder={isListening ? "Listening... (speak now)" : (attachedTextbookContext || attachedChatFile) ? "Ask a question about the attached document..." : "Message Omni-Core..."} className="flex-1 bg-transparent px-2 py-4 outline-none text-gray-100 placeholder-gray-400 text-[15px]" />
                         <div className="flex items-center gap-2 pr-2">
                           <button onClick={() => setSearchWebEnabled(!searchWebEnabled)} className={`px-3 py-1.5 rounded-full text-xs font-medium flex items-center gap-1.5 transition-all ${searchWebEnabled ? 'bg-emerald-600/30 text-emerald-400 border border-emerald-500/50' : 'bg-[#212121] text-gray-400 border border-gray-700 hover:text-white'}`} title="Enable real-time web search">
                             <Globe className="w-3.5 h-3.5" />{searchWebEnabled ? 'Web Search ON' : 'Web Search OFF'}
@@ -1386,7 +1439,6 @@ export default function App() {
             </div>
           )}
 
-          {/* 2. FOCUS & POMODORO */}
           {activeTab === 'focus' && (
             <div className="flex-1 flex overflow-hidden">
               <div className="flex-1 flex flex-col items-center justify-center relative p-8">
