@@ -2381,6 +2381,7 @@ async fn ask_ollama(
     model_tier: String,
     search_web: bool,
     attached_textbook: Option<TextbookAttachment>, 
+    image_b64: Option<String>, 
     current_date_str: String,
     _current_epoch_ms: i64,
     start_of_today_ms: i64,
@@ -2460,7 +2461,16 @@ You may only use ONE tag per response.
         let chat_url = format!("http://{}/api/chat", ollama_host);
                                                                                                              
         let full_system_prompt = format!("{}\n{}\n{}", get_system_prompt(&persona), db_context, tool_instructions);
-                                                                                                                      
+                         
+        let mut messages = messages.clone();
+        if let Some(b64) = image_b64 {
+            if let Some(last_msg) = messages.last_mut() {
+                if let Some(obj) = last_msg.as_object_mut() {
+                    obj.insert("images".to_string(), serde_json::json!([b64]));
+                }
+            }
+        }
+
         let mut ollama_messages = vec![serde_json::json!({
             "role": "system",
             "content": full_system_prompt
@@ -2662,6 +2672,49 @@ You may only use ONE tag per response.
 
     thread_result
 }
+
+#[tauri::command]
+async fn capture_screen() -> Result<String, String> {
+    let temp_path = std::env::temp_dir().join("omni_screen_capture.png");
+    let path_str = temp_path.to_string_lossy().to_string();
+
+    // PowerShell script that captures screen AND downscales to max 1024px width to save VRAM
+    let ps_script = format!(
+        "Add-Type -AssemblyName System.Windows.Forms,System.Drawing; \
+         $screen = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds; \
+         $bmp = New-Object System.Drawing.Bitmap $screen.Width, $screen.Height; \
+         $gfx = [System.Drawing.Graphics]::FromImage($bmp); \
+         $gfx.CopyFromScreen($screen.Location, [System.Drawing.Point]::Empty, $screen.Size); \
+         $maxW = 480; \
+         if ($bmp.Width -gt $maxW) {{ \
+             $maxH = [int]($bmp.Height * ($maxW / $bmp.Width)); \
+             $resized = New-Object System.Drawing.Bitmap $maxW, $maxH; \
+             $g2 = [System.Drawing.Graphics]::FromImage($resized); \
+             $g2.DrawImage($bmp, 0, 0, $maxW, $maxH); \
+             $g2.Dispose(); \
+             $bmp.Dispose(); \
+             $bmp = $resized; \
+         }} \
+         $bmp.Save('{}', [System.Drawing.Imaging.ImageFormat]::Png); \
+         $gfx.Dispose(); $bmp.Dispose();",
+        path_str.replace("\\", "/")
+    );
+
+    let mut cmd = Command::new("powershell");
+    cmd.args(&["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", &ps_script]);
+    apply_hidden_flag(&mut cmd);
+
+    let output = cmd.output().map_err(|e| format!("Screenshot failed: {}", e))?;
+    if !output.status.success() {
+        return Err("PowerShell failed to capture screen".into());
+    }
+
+    let bytes = std::fs::read(&temp_path).map_err(|e| e.to_string())?;
+    let b64 = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &bytes);
+    let _ = std::fs::remove_file(&temp_path);
+
+    Ok(b64)
+}
                                                                                                          
 fn main() {
                                                                                             
@@ -2701,6 +2754,7 @@ fn main() {
         .manage(DbState(Mutex::new(db_conn)))
         .manage(AudioState(Mutex::new(audio_tx)))
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build()) 
         .setup(|app| {
             let quit_i = MenuItem::with_id(app, "quit", "Shutdown Omni-Core", true, None::<&str>)?;
             let show_i =
@@ -2711,14 +2765,27 @@ fn main() {
                 .icon(app.default_window_icon().unwrap().clone())
                 .menu(&menu)
                 .on_menu_event(|app, event| match event.id.as_ref() {
-                    "quit" => app.exit(0),
+                    "quit" => app.exit(0), 
                     "show" => {
                         if let Some(window) = app.get_webview_window("main") {
-                            window.show().unwrap();
-                            window.set_focus().unwrap();
+                            let _ = window.show();
+                            let _ = window.set_focus();
                         }
                     }
                     _ => {}
+                })
+                .on_tray_icon_event(|tray, event| {
+                    if let tauri::tray::TrayIconEvent::Click {
+                        button: tauri::tray::MouseButton::Left,
+                        button_state: tauri::tray::MouseButtonState::Up,
+                        ..
+                    } = event {
+                        let app = tray.app_handle();
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                        }
+                    }
                 })
                 .build(app)?;
                                                                                                      
@@ -2830,8 +2897,12 @@ fn main() {
             Ok(())
         })
                                                                           
-        .on_window_event(|_window, event| match event {
-            tauri::WindowEvent::CloseRequested { .. } => {
+        .on_window_event(|window, event| match event {
+            tauri::WindowEvent::CloseRequested { api, .. } => {
+                api.prevent_close();
+                
+                let _ = window.hide();
+
                 let models_to_purge = [
                     "llama3.2:3b",
                     "qwen2.5-coder:3b",
@@ -2925,6 +2996,7 @@ fn main() {
             del_card,
             extract_text_from_file,
             kill_process_and_yell, //HEHE, use and find out lmao
+            capture_screen,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

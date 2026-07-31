@@ -18,10 +18,24 @@
     },
     "windows": [
       {
+        "label": "main",
         "title": "OmniDashboard",
         "width": 1200,
         "height": 800,
         "visible": true
+      },
+      {
+        "label": "overlay",
+        "title": "Omni Overlay",
+        "url": "/#/overlay",
+        "width": 420,
+        "height": 140,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "visible": false,
+        "resizable": true
       }
     ]
   },

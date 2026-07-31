@@ -1,10 +1,13 @@
-import React from "react";
-import ReactDOM from "react-dom/client";
-import App from "./App";
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import App from './App';
+import OverlayHUD from './OverlayHUD';
 import "./styles/index.css";
 
-ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
+const isOverlay = window.location.href.includes('overlay');
+
+ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>
-    <App />
+    {isOverlay ? <OverlayHUD /> : <App />}
   </React.StrictMode>
 );

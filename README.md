@@ -413,9 +413,14 @@ ollama pull qwen2.5-coder:3b
 # The High Performance brain (Ultra-fast execution)
 ollama pull phi4-mini:latest
 
+# The Image Engine (For the image scanning, and Hotkey pullup)
+
+ollama pull qwen3.5:2b
+
 # The Textbook Scanner brain (Used for RAG and PDFs)
 ollama pull nemotron-mini:latest
 ```
+
 
 ---
 

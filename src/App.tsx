@@ -4,6 +4,8 @@ import { isPermissionGranted, requestPermission, sendNotification } from '@tauri
 import { open } from '@tauri-apps/plugin-dialog';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { register, unregisterAll } from '@tauri-apps/plugin-global-shortcut';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell 
 } from 'recharts';
@@ -71,7 +73,7 @@ const DISTRACTING_APPS = [
   "battle.net", "origin", "eadesktop", "ubisoftconnect", "gog galaxy",
   "fortnite", "apex", "pubg", "rainbowsix", "rust", "destiny2", "terraria", 
   "stardewvalley", "rocketleague", "amongus", "fallguys", "gta5", "gtav",
-  "spotify", "slack", "telegram", "whatsapp", "skype" // Add literally anything here
+  "spotify", "slack", "telegram", "whatsapp", "skype" 
 ];
 
 const SOCIAL_SITES = [
@@ -277,7 +279,6 @@ export default function App() {
             const appName = (win.app_name || "").toLowerCase();
             const title = (win.title || "").toLowerCase();
             
-            // The .some() method checks if any string in our giant arrays is inside the appName/title
             const isBrowser = BROWSERS.some(b => appName.includes(b));
             const isSocialSite = SOCIAL_SITES.some(s => title.includes(s));
             const isDistractingApp = DISTRACTING_APPS.some(a => appName.includes(a));
@@ -740,6 +741,46 @@ export default function App() {
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [chatHistory, isTyping]);
   useEffect(() => { const flushMemory = async () => { try { await invoke('flush_vram', { modelTier: selectedTier }); } catch (e) { console.error(e); } }; flushMemory(); }, [selectedTier]);
 
+  useEffect(() => {
+    let active = true;
+    const shortcut = 'CommandOrControl+Shift+J';
+
+    const setupShortcut = async () => {
+      try {
+        const { isRegistered } = await import('@tauri-apps/plugin-global-shortcut');
+        const { WebviewWindow } = await import('@tauri-apps/api/webviewWindow');
+        
+        const alreadyBound = await isRegistered(shortcut);
+        if (alreadyBound) await unregisterAll();
+
+        if (active) {
+          await register(shortcut, async (event) => {
+            if (event.state === 'Pressed') {
+              // Get the overlay window
+              const overlayWin = await WebviewWindow.getByLabel('overlay');
+              
+              if (overlayWin) {
+                await overlayWin.show();
+                await overlayWin.setFocus();
+                
+                await overlayWin.emit('trigger-daemon-hud', {});
+              }
+            }
+          });
+        }
+      } catch (e) {
+        console.error("Failed to register global shortcut:", e);
+      }
+    };
+    
+    setupShortcut();
+
+    return () => {
+      active = false;
+      unregisterAll().catch(console.error);
+    };
+  }, []);
+
   const handleAttachFileToChat = async () => {
     try {
       const selected = await open({ 
@@ -752,7 +793,6 @@ export default function App() {
       const fileName = selected.split(/[\\/]/).pop() || 'Document';
       const content = await invoke<string>('extract_text_from_file', { filePath: selected });
       
-      // We cap it at ~30k characters to prevent instantly overflowing smaller VRAM models
       setAttachedChatFile({ name: fileName, content: content.substring(0, 30000) }); 
     } catch (e: any) {
       console.error(e);
