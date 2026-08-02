@@ -4,7 +4,7 @@
 
 Welcome to the edge of productivity. If you are a student, a developer, or a professional who's tired of paying for like ten different subscription apps, constantly getting distracted, and worrying about corporations harvesting your private data, then **Omni-Core is your ultimate solution.**
 
-## Why this fits into No-Internet (For the Hack Club lmao)
+## Why this fits in (For the Hack Club lmao)
 
 Omni-Dashboard will completely replace your fragmented, cloud-dependent SaaS (Software as a Service) applications with a unified, hyper-fast,AND offline platform. With **Tauri v2** (a framework for building tiny, blazing-fast desktop apps) and a **Rust** backend, it can pair a database with a multiple Local AI models powered by **Ollama** (you need to have Ollama up and running for this with Llama3.2:3b and more downloaded). 
 
